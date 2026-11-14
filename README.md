@@ -13,11 +13,12 @@
 
 - [Final research report](reports/FINAL_RESEARCH_REPORT.md): aggregate-data analysis, chronological model comparison, limitations, and rubric coverage.
 - Rebuild its figures and metrics from the raw official annual table with `python scripts/build_aggregate_report.py`.
-- The Streamlit dashboard (`app.py`) still contains legacy event-level demo outputs based on generated records. It displays a data-integrity warning; do not cite those outputs as empirical findings.
+- The Streamlit dashboard (`app.py`) follows the project rubric: data preparation and audit, EDA, model development, evaluation and interpretation, and reproducibility. It uses only the official annual aggregate data for empirical findings.
+- Run the verified workflow from the project entry point with `python main.py --stage report` (or `python main.py --stage all`).
 
 ### Current status
-- **Verified analysis path:** The aggregate report script regenerates annual summary metrics, forecast comparisons, and three report figures from the official annual CSV.
-- **Not verified:** The legacy multi-stage collection/analysis pipeline. Its collection runner has a known method-name mismatch.
+- **Verified analysis path:** The aggregate report script regenerates annual summary metrics, rolling and final-holdout forecasts, model comparisons, and three report figures from the official annual CSV. The dashboard exposes these steps and interpretations.
+- **Not part of the empirical workflow:** Older event-level collection, classification, weather-linkage, and geospatial code. Some outputs use generated records and must not be interpreted as observed crash-level results.
 - **Not empirical:** Existing event-level models, hotspots, and related charts/reports derived from generated data.
 
 ---
@@ -89,35 +90,24 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### B. Rebuild the final report analysis
+### B. Run the verified analysis pipeline
 
 ```bash
-python scripts/build_aggregate_report.py
+python main.py --stage report
 ```
 
-This deterministic command reads the official annual crash CSV and regenerates the final report's figures and metric tables. It does not load the synthetic event-level dataset.
+This command validates the official annual crash CSV, derives the aggregate analysis fields, performs rolling-origin and chronological holdout evaluation, and regenerates the report's figures and metric tables. It does not load the synthetic event-level dataset. You can also invoke the builder directly with `python scripts/build_aggregate_report.py`.
 
-### C. Legacy full pipeline
-
-The following command is retained as historical project code. The full pipeline is not verified end to end, the collector has a known method-name mismatch, and some legacy stages produce generated event-level outputs. Do not use those outputs as empirical crash-level findings.
-
+### C. Launch the Interactive Streamlit Dashboard
 ```bash
-PYTHONPATH=. python3 main.py --stage all
-```
-
-Individual legacy stages and original notebooks remain available for inspection but do not form the evidence base of the final report.
-
-### D. Launching the Interactive Streamlit Dashboard
-```bash
-streamlit run app.py
+python main.py --stage app
 ```
 *Access the dashboard in your web browser at `http://localhost:8501`.*
 
-### E. Viewing Maps & Reports
-- **Interactive GIS Map:** Open `results/maps/chennai_accident_hotspots_interactive_map.html` in any web browser.
+### D. Viewing the report and results
 - **Final aggregate analysis report:** Read `reports/FINAL_RESEARCH_REPORT.md`.
 - **Aggregate forecast metrics:** Inspect `results/metrics/annual_forecast_model_comparison.csv`.
-- **Legacy event-level metrics:** These use generated data and are illustrative only.
+- **Legacy event-level artifacts:** These use generated data and are illustrative only; the dashboard excludes them from its empirical findings.
 
 ---
 

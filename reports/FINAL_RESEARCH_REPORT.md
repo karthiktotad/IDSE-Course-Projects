@@ -227,12 +227,12 @@ The figures, annual derived table, rolling validation predictions, final holdout
 
 ```bash
 python -m pip install -r requirements.txt
-python scripts/build_aggregate_report.py
+python main.py --stage report
 ```
 
-The analysis script is [`scripts/build_aggregate_report.py`](../scripts/build_aggregate_report.py). It reads the official raw annual table, checks required fields and year continuity, calculates aggregate features, performs the fixed chronological evaluation, and writes outputs to `reports/figures/` and `results/metrics/`. The script does not load `chennai_accident_severity_modeling_dataset.csv` or the saved event-level models. The procedure is deterministic and uses no random split, so a random seed is not applicable.
+The analysis script is [`scripts/build_aggregate_report.py`](../scripts/build_aggregate_report.py). It reads the official raw annual table, checks required fields and year continuity, calculates aggregate features, performs the fixed chronological evaluation, and writes outputs to `reports/figures/` and `results/metrics/`. The script does not load `chennai_accident_severity_modeling_dataset.csv` or the saved event-level models. The procedure is deterministic and uses no random split, so a random seed is not applicable. The interactive workflow in [`app.py`](../app.py) presents the data audit, EDA, models, evaluation, and interpretation; launch it with `python main.py --stage app`.
 
-This reproducible analysis command is separate from the older full-pipeline runner. The latter still has a known collector method-name mismatch noted in [`DATA_INTEGRITY_NOTICE.md`](../DATA_INTEGRITY_NOTICE.md); do not treat the entire legacy pipeline as verified end to end.
+The former collection and event-level analysis modules remain legacy code and are outside this verified empirical workflow. A collection runner in that legacy code has a known method-name mismatch noted in [`DATA_INTEGRITY_NOTICE.md`](../DATA_INTEGRITY_NOTICE.md); do not treat it or the synthetic event-level artifacts as verified empirical results.
 
 ---
 

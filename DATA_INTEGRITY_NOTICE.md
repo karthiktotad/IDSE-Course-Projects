@@ -12,10 +12,10 @@ The OpenCity / Greater Chennai Police crash file in `data/raw/accidents/chennai_
 
 In particular, the repository's event-level severity associations, weather and infrastructure comparisons, classifier scores, SHAP explanations, and crash hotspot locations must not be interpreted as measured local effects or used to guide policy. The annual source aggregates can support aggregate trend descriptions, subject to the source documentation and known data limitations.
 
-Several existing reports and dashboard labels still describe generated results as empirical. This notice supersedes those descriptions. A valid crash-level analysis requires genuine incident-level records with documented provenance and appropriate location/time fields, followed by recomputation of every derived result.
+Some historical reports, notebooks, and saved dashboard artifacts still describe generated results as empirical. This notice supersedes those descriptions. The current research dashboard and final report use only the official annual aggregate source for empirical findings. A valid crash-level analysis requires genuine incident-level records with documented provenance and appropriate location/time fields, followed by recomputation of every derived result.
 
 ## Reproducibility status
 
-The dashboard can display the saved artifacts, but that does not validate their empirical meaning. The full collection and analysis pipeline has not been verified end to end; the collection runner also has a known method-name mismatch. No automated test suite was run as part of the project audit.
+The verified annual aggregate workflow is reproducible end to end with `python main.py --stage report` or `python scripts/build_aggregate_report.py`. It validates the source, prepares derived fields, creates EDA and forecast outputs, and evaluates rolling-origin and final chronological holdout predictions. The older multi-stage collection and event-level analysis pipeline is not part of this verified workflow and should not be treated as empirical evidence.
 
-The final report at `reports/FINAL_RESEARCH_REPORT.md` uses only the official annual aggregate crash table. Its annual features, forecast comparisons, metrics, and figures can be regenerated with `python scripts/build_aggregate_report.py`; this analysis does not use the generated event-level dataset or the saved synthetic models.
+The final report at `reports/FINAL_RESEARCH_REPORT.md` and the current Streamlit dashboard use only the official annual aggregate crash table. Their annual features, forecast comparisons, metrics, and figures can be regenerated with the commands above; this analysis does not use the generated event-level dataset or the saved synthetic models.
