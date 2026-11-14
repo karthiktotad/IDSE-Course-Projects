@@ -1,6 +1,6 @@
 # Data Integrity Notice
 
-**Updated:** 2026-11-07
+**Updated:** 2026-11-14
 
 ## What the data supports
 
@@ -17,3 +17,5 @@ Several existing reports and dashboard labels still describe generated results a
 ## Reproducibility status
 
 The dashboard can display the saved artifacts, but that does not validate their empirical meaning. The full collection and analysis pipeline has not been verified end to end; the collection runner also has a known method-name mismatch. No automated test suite was run as part of the project audit.
+
+The final report at `reports/FINAL_RESEARCH_REPORT.md` uses only the official annual aggregate crash table. Its annual features, forecast comparisons, metrics, and figures can be regenerated with `python scripts/build_aggregate_report.py`; this analysis does not use the generated event-level dataset or the saved synthetic models.

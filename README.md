@@ -1,37 +1,24 @@
-# Beyond Accident Counts: A Data-Driven Analysis of Road Accident Risk Factors, Severity and Accident-Prone Locations in Chennai
+# Chennai Road Safety Analytics: Aggregate Trends and Forecast Evaluation
 
 > [!CAUTION]
 > **Data integrity notice:** The 5,035-row event-level modeling dataset and the analyses derived from it are generated/synthetic, not observed crash records. Those results are illustrative and do not support empirical claims about crash-level patterns in Chennai. The official crash source available here is annual aggregate data. See [DATA_INTEGRITY_NOTICE.md](DATA_INTEGRITY_NOTICE.md) before interpreting or reusing results.
 
 ## 1. Project Title & Overview
 **Study Area:** Greater Chennai Police Commissionerate, Tamil Nadu, India  
-**Research Domains:** Road Safety, Transportation Analytics, Environmental Data Science, Applied Statistics, Machine Learning, Geospatial Information Systems (GIS).  
-**Primary Objective:** To investigate historical road accident records in Chennai, integrate meteorological (NASA POWER) and road infrastructure (OpenStreetMap) datasets, examine risk factors associated with crash severity, isolate geographical accident concentration hotspots, and develop rigorously evaluated machine learning models for accident severity classification.
+**Primary Objective:** Describe official annual accident counts and severity composition, then evaluate simple time-ordered forecasts. The available official Chennai crash source is annual aggregate data; it cannot support incident-level risk-factor or hotspot claims.
 
 ---
 
-## 2. Development Progress
+## Current deliverable
 
-- [x] Stage 1: Project structure, virtual environment, and governance documentation created.
-- [x] Stage 2: Data collection and automated retrieval of Chennai crash, weather, and road network datasets.
-- [x] Stage 3: Data inspection, quality profiling, and statistical data audit report.
-- [x] Stage 4: Data preprocessing, temporal-spatial cleaning, and dataset integration.
-- [x] Stage 5: Exploratory data analysis (EDA) and academic research visualizations.
-- [x] Stage 6: Statistical hypothesis testing, categorical associations, and baseline odds ratios.
-- [x] Stage 7: Feature engineering, temporal cycles, spatial markers, and target formulation.
-- [x] Stage 8: Machine learning model development (Logistic Regression, Decision Trees, Random Forest, XGBoost).
-- [x] Stage 9: Model evaluation, class-imbalance treatment, PR-AUC, and SHAP interpretability.
-- [x] Stage 10: Geospatial hotspot identification (DBSCAN, KDE, Folium interactive maps).
-- [x] Stage 11: Interactive Streamlit research dashboard.
-- [x] Stage 12: Comprehensive research synthesis, limitations, and final documentation.
+- [Final research report](reports/FINAL_RESEARCH_REPORT.md): aggregate-data analysis, chronological model comparison, limitations, and rubric coverage.
+- Rebuild its figures and metrics from the raw official annual table with `python scripts/build_aggregate_report.py`.
+- The Streamlit dashboard (`app.py`) still contains legacy event-level demo outputs based on generated records. It displays a data-integrity warning; do not cite those outputs as empirical findings.
 
-### Latest Update
-Completed the entire 12-stage research and engineering lifecycle. Delivered an end-to-end reproducible research pipeline comprising automated data ingestion (OpenCity, NASA POWER, OpenStreetMap), data profiling, multi-source integration, 12 publication-grade EDA visualizations, inferential hypothesis testing ($\chi^2$, Cramér's V, multivariable Logistic Regression odds ratios), 4 machine learning classifiers with SHAP explainability, Haversine DBSCAN geospatial hotspot clustering with an interactive Folium map, an interactive Streamlit research dashboard (`app.py`), 9 Jupyter notebooks (`notebooks/`), and an academic research monograph (`reports/FINAL_RESEARCH_REPORT.md`).
-
-### Current Status
-- **Working:** The Streamlit dashboard displays the saved project artifacts.
-- **Incomplete:** Event-level analyses use generated records and are not valid empirical findings. The full collection and analysis pipeline has not been verified end to end.
-- **Blocked:** None.
+### Current status
+- **Verified analysis path:** The aggregate report script regenerates annual summary metrics, forecast comparisons, and three report figures from the official annual CSV.
+- **Not verified:** The legacy multi-stage collection/analysis pipeline. Its collection runner has a known method-name mismatch.
+- **Not empirical:** Existing event-level models, hotspots, and related charts/reports derived from generated data.
 
 ---
 
@@ -102,40 +89,40 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### B. Master Pipeline Execution
-You can execute the entire research pipeline end-to-end or run specific stages:
+### B. Rebuild the final report analysis
 
 ```bash
-# Run the complete end-to-end research pipeline
-PYTHONPATH=. python3 main.py --stage all
-
-# Or run individual stages modularly:
-PYTHONPATH=. python3 main.py --stage collect      # Stage 2: Data ingestion
-PYTHONPATH=. python3 main.py --stage audit        # Stage 3: Data audit
-PYTHONPATH=. python3 main.py --stage preprocess   # Stage 4: Cleaning & integration
-PYTHONPATH=. python3 main.py --stage eda          # Stage 5: Exploratory data analysis
-PYTHONPATH=. python3 main.py --stage stats        # Stage 6: Statistical testing & baseline
-PYTHONPATH=. python3 main.py --stage features     # Stage 7: Feature engineering
-PYTHONPATH=. python3 main.py --stage train        # Stage 8 & 9: Model training & evaluation
-PYTHONPATH=. python3 main.py --stage geo          # Stage 10: Geospatial hotspot clustering
+python scripts/build_aggregate_report.py
 ```
 
-### C. Launching the Interactive Streamlit Dashboard
+This deterministic command reads the official annual crash CSV and regenerates the final report's figures and metric tables. It does not load the synthetic event-level dataset.
+
+### C. Legacy full pipeline
+
+The following command is retained as historical project code. The full pipeline is not verified end to end, the collector has a known method-name mismatch, and some legacy stages produce generated event-level outputs. Do not use those outputs as empirical crash-level findings.
+
+```bash
+PYTHONPATH=. python3 main.py --stage all
+```
+
+Individual legacy stages and original notebooks remain available for inspection but do not form the evidence base of the final report.
+
+### D. Launching the Interactive Streamlit Dashboard
 ```bash
 streamlit run app.py
 ```
 *Access the dashboard in your web browser at `http://localhost:8501`.*
 
-### D. Viewing Interactive Maps & Reports
+### E. Viewing Maps & Reports
 - **Interactive GIS Map:** Open `results/maps/chennai_accident_hotspots_interactive_map.html` in any web browser.
-- **Academic Research Monograph:** Read `reports/FINAL_RESEARCH_REPORT.md`.
-- **Model Evaluation Table:** Inspect `results/metrics/model_comparison_table.csv`.
-- **Hypothesis Test Outcomes:** Inspect `results/metrics/chi_square_hypothesis_tests.csv`.
+- **Final aggregate analysis report:** Read `reports/FINAL_RESEARCH_REPORT.md`.
+- **Aggregate forecast metrics:** Inspect `results/metrics/annual_forecast_model_comparison.csv`.
+- **Legacy event-level metrics:** These use generated data and are illustrative only.
 
 ---
 
-## 5. Research Distinctions & Integrity Rules
-1. **Severity Prediction vs. Crash Risk:** The predictive model classifies accident severity *conditional on an accident having occurred* ($P(\text{Severe} \mid \text{Crash})$); it does not estimate raw accident occurrence probability without exposure (AADT) data.
-2. **Empirical Hotspots:** High incident concentrations reflect empirical crash counts, not relative risk per vehicle-kilometer.
-3. **No Automated Testing:** In strict compliance with research instructions, testing is conducted via manual validation checklists and inspection.
-4. **Data Authenticity:** The event-level modeling dataset currently contains generated/synthetic rows calibrated to aggregate totals and marginal distributions. It is not observed crash-level data; derived event-level results are illustrative only. See [DATA_INTEGRITY_NOTICE.md](DATA_INTEGRITY_NOTICE.md).
+## Research distinctions and integrity rules
+
+1. **Aggregate counts vs. incident risk:** The final report analyzes annual totals. It does not estimate crash-level severity probability or incident risk.
+2. **Hotspots:** Existing hotspot outputs use generated event-level rows and must not be presented as empirical Chennai crash locations.
+3. **Data authenticity:** The event-level modeling dataset is synthetic and derived event-level results are illustrative only. See [DATA_INTEGRITY_NOTICE.md](DATA_INTEGRITY_NOTICE.md).

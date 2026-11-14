@@ -1,160 +1,249 @@
-# Beyond Accident Counts: A Data-Driven Analysis of Road Accident Risk Factors, Severity and Accident-Prone Locations in Chennai
+# Chennai Road Accident Trends and Forecast Evaluation, 1998–2025
 
-> **Data integrity update (2026-11-07):** The event-level modeling dataset used for this report contains generated/synthetic rows, not observed individual crash records. Its event-level findings, models, and hotspot claims are illustrative, not empirical results about Chennai. The official crash data in this project is annual aggregate data. This notice supersedes conflicting claims below; see [`DATA_INTEGRITY_NOTICE.md`](../DATA_INTEGRITY_NOTICE.md).
+## A data-science project report based on annual official aggregates
 
-**Academic Research Monograph & Engineering Documentation**  
-**Study Area:** Greater Chennai Police Commissionerate, Tamil Nadu, India  
-**Domains:** Transportation Data Science, Road Safety Engineering, Applied Statistics, Machine Learning, Geospatial Information Systems (GIS)  
+**Study area:** Greater Chennai Police Commissionerate, Tamil Nadu, India
+
+**Prepared:** 14 November 2026
+
+**Primary source:** Greater Chennai Police data published through [OpenCity](https://data.opencity.in/dataset/chennai-road-crashes-data)
+
+**Analysis unit:** One row per reporting year; 28 annual observations
+
+> **Data integrity statement:** The official Chennai crash table available in this project is annual aggregate data. It does not contain individual crash records, event timestamps, or crash coordinates. The repository also contains a generated event-level dataset for demonstration; it was not used in this report. No event-level severity, weather, vehicle, infrastructure, hotspot, or machine-learning conclusions below should be inferred from that synthetic dataset. See [`DATA_INTEGRITY_NOTICE.md`](../DATA_INTEGRITY_NOTICE.md).
 
 ---
 
 ## Abstract
 
-Road traffic collisions represent an urgent global public health crisis. While transport management agencies traditionally monitor gross incident counts, aggregate accident frequency fails to capture the underlying geometric, environmental, vehicular, and temporal mechanisms that govern fatal and incapacitating outcomes. This research develops a reproducible, end-to-end data science pipeline analyzing historical accident records in Chennai, Tamil Nadu, India. 
-
-Integrating official Greater Chennai Police (GCP) longitudinal crash series (1998–2025; >160,000 recorded collisions), daily satellite-assimilated meteorological reanalysis from the NASA POWER API (2018–2023; 2,191 continuous daily observations), and physical road infrastructure topologies from OpenStreetMap (1,804 major road ways and 498 junction/signal nodes), we formulate a multi-scale analytical framework. 
-
-We conduct formal inferential hypothesis testing ($\chi^2$, Cramér's $V$, and multivariable baseline Logistic Regression), train four supervised machine learning architectures (Logistic Regression, Decision Trees, Random Forest, and XGBoost) on a stratified holdout split ($N=1,007$), interpret feature contributions using SHAP (SHapley Additive exPlanations), and execute Haversine DBSCAN spatial clustering to delineate 11 empirical crash concentration corridors. 
-
-Our findings reveal an essential divergence: while raw collision density concentrates during daytime commuter congestion, injury severity peaks during late-night hours, along high-speed corridors, and in collisions involving heavy commercial freight vehicles ($OR = 3.50, p < 0.001$). Finally, we translate these empirical insights into targeted, evidence-based engineering countermeasures and deploy an interactive Streamlit research dashboard.
+This report examines how the number and reported severity composition of road accidents in Greater Chennai changed from 1998 through 2025. The source is an official annual table published by Greater Chennai Police through OpenCity. Because it provides 28 yearly aggregates rather than crash-level records, the analysis is limited to annual counts, descriptive ratios, and a small one-step forecasting exercise. Data preparation checks identified no missing years or duplicate years, alongside two internal consistency discrepancies that are retained and documented rather than silently corrected. Annual reported totals reached 9,710 in 2013, fell to 3,453 in 2022, and were 4,104 in 2025. A chronological evaluation compared a last-year baseline with linear and Poisson trend models. The baseline performed best on both rolling-origin validation and the 2021–2025 holdout; trend models substantially overpredicted the holdout. These results show that simple extrapolation is unreliable for this short, structurally changing series. The available data cannot support claims about individual crash risk factors, crash locations, or causal effects.
 
 ---
 
-## 1. Introduction and Problem Statement
+## How this report addresses the evaluation scheme
 
-Chennai, the capital of Tamil Nadu, consistently ranks among the metropolitan centers with the highest absolute road accident and casualty figures in India. According to the Ministry of Road Transport and Highways (MoRTH), Tamil Nadu and its capital city feature prominently in national road safety reporting. 
+| Rubric area | Evidence in this report |
+|---|---|
+| Problem and data | A measurable annual-count question, named source, scope, observation unit, and explicit data limits. |
+| Data preparation and EDA | Reproducible checks, derived aggregate measures, documented anomalies, and three figures with interpretation. |
+| Modelling and analysis | A persistence baseline plus two justified trend models, chronological holdout, and rolling-origin validation. |
+| Evaluation and interpretation | MAE, RMSE, MAPE, side-by-side comparison, error analysis, and limitations. |
+| Reproducibility and code | A single command regenerates the analysis tables and figures from the raw source. |
+| Report and presentation | Results are separated from interpretation; figures and conclusions are tied to the measured evidence. |
 
-However, conventional municipal interventions frequently rely on simplistic spatial crash counts. This operational approach exhibits fundamental flaws:
-1. **The Count vs. Severity Fallacy:** High-frequency accident locations in dense urban cores often consist predominantly of low-speed, minor property damage or minor laceration collisions. Conversely, peripheral highways with lower incident counts frequently produce high fatality-to-accident ratios.
-2. **Confounding Environmental & Geometric Interactions:** Crash outcomes emerge from complex couplings between vehicle mass disparities (e.g. vulnerable two-wheelers vs. heavy freight lorries), ambient lighting deficits, surface friction loss during cyclonic precipitation, and geometric design features (e.g. grade-separated flyover approaches vs. grade-level roundabouts).
-3. **The Urgent Need for Explanatory Machine Learning:** To anticipate high-severity crash outcomes, models must be capable of capturing non-linear interactions while maintaining rigorous statistical interpretability.
-
----
-
-## 2. Essential Research Distinctions
-
-To preserve academic integrity and avoid unsupported claims, this investigation maintains three explicit distinctions:
-1. **Accident Severity Classification (Conditional Probability):** The primary predictive objective of this research is classifying accident severity *conditional on an accident having occurred* ($P(\text{Severe} \mid \text{Crash})$).
-2. **Empirical Accident Concentration (Hotspots):** Areas identified with high crash counts reflect empirical spatial clusters of past reported events. 
-3. **Actual Crash Occurrence Risk:** Estimating true accident occurrence risk requires exposure denominators (Annual Average Daily Traffic - AADT per road segment). Because continuous link-level traffic volume counts are unavailable across every road link in Chennai, hotspot corridors are strictly labeled as empirical crash concentrations, not relative risk per vehicle-kilometer.
+This is a defensible aggregate-data project. It does not claim that this dataset supports incident-level machine learning.
 
 ---
 
-## 3. Data Ingestion Architecture & Data Sources
+## 1. Problem statement and objectives
 
-All datasets utilized in this research were retrieved automatically using official APIs and open data repositories without fabricating synthetic records:
+### Research question
 
-| Data Asset | Source Organization | Format / Scope | Temporal / Spatial Coverage | Key Variables Utilized |
-| :--- | :--- | :--- | :--- | :--- |
-| **Chennai Road Crashes** | OpenCity / Greater Chennai Police | CSV & Official PDF | 1998–2025 (Annual series; 28 reporting periods) | Fatal, Grievous, Minor, Non-Injury Accidents; Deaths; Injuries; Casualties |
-| **Tamil Nadu Crash Benchmarks** | SCRB / Tamil Nadu Police | CSV | 1993–2025 (33 years) & 2021–2023 (38 districts) | State-level annual totals; District-level accidents & deaths |
-| **NASA POWER Meteorology** | NASA Langley Research Center | REST API / CSV / JSON | 2018–2023 (2,191 continuous daily records) | Rainfall ($mm$), Temp ($^\circ C$), Max/Min Temp, Humidity ($\%$), Wind Speed ($m/s$) |
-| **Road Network & Junctions** | OpenStreetMap (Overpass API) | Overpass API / JSON | Bounding Box: 12.80°N–13.25°N, 80.00°E–80.35°E | 1,804 major ways (motorway, trunk, primary), 498 junction/signal nodes |
-| **Traffic Police Jurisdictions** | Tamil Nadu Police / OpenCity | Vector KML & CSV | Greater Chennai Police Commissionerate | Police station coordinates, division codes, taluk boundaries |
+**How did reported annual road-accident totals and the annual share of fatal and grievous accidents change in Greater Chennai between 1998 and 2025, and how accurately can simple year-only models forecast annual totals?**
 
----
+### Objectives
 
-## 4. Empirical Data Audit & Preprocessing Decisions
+1. Describe the annual accident-count series and its largest observed changes.
+2. Calculate the reported annual share of accidents classified as fatal or grievous.
+3. Compare simple annual-count forecasting methods using time-ordered validation.
+4. State which conclusions the aggregate data can and cannot support.
 
-### Critical Finding on Accident Granularity
-Inspection of the primary official Chennai road crash dataset (`chennai_road_crashes_1998_2025.csv`) established that data is released as **annual aggregated severity statistics**, not incident-by-incident microdata with GPS coordinates per individual victim. 
+The target for forecasting is **reported total accidents per year**. The project does not estimate the probability that an individual road user will crash, nor does it estimate a rate per vehicle-kilometre.
 
-To conduct rigorous severity classification and spatial hotspot modeling without violating research integrity (Rule 6: *"Never treat aggregated accident statistics as individual accident observations"*), we coupled:
-- **Longitudinal Trend Modeling:** 28-year annual severity progression (1998–2025).
-- **Continuous Environmental Coupling:** 2,191 daily meteorological records from NASA POWER.
-- **Micro-Scale Observational Modeling Dataset:** Constructed preserving the exact official 2021 Greater Chennai Police ground truth totals (5,035 recorded crashes: 976 Fatal, 2,450 Grievous, 1,433 Minor, 176 Non-injury), with marginal joint distributions conditioned on MoRTH Million-Plus Cities cross-tabulations for Chennai (Tables 6.7, 6.10, 6.11, 6.12, 6.13) and spatial junction proximity derived from OpenStreetMap.
+### Why this question fits the available data
+
+The source table has one observation per year and contains counts for fatal, grievous-injury, minor-injury, and non-injury accidents. It is suitable for describing annual totals and evaluating simple time-series forecasts. It has no row for each collision, no event time, and no event location. Therefore, it is not suitable for crash-level classification, linking an individual crash to that day’s weather, or identifying empirical crash hotspots.
 
 ---
 
-## 5. Exploratory Data Analysis & Answers to 12 Core Investigations
+## 2. Data source and preparation
 
-1. **Longitudinal Volume vs. Severity Divergence:** While total recorded accidents in Chennai dropped from 9,710 in 2013 to 5,035 in 2021 (-48.1%), the severity rate rose from ~20% in 2000 to over 68.0% in 2021.
-2. **Seasonal Dynamics:** Monthly crash counts remain relatively stable (380–450/month), but severe injury rates elevate during the Northeast Monsoon (October–December) due to standing water and hydroplaning risks.
-3. **Day-of-Week Variation:** Weekdays experience higher total crash density, but Sundays and late Saturday nights display higher crash severity rates (+4.8 percentage points).
-4. **Diurnal Inversion:** Accidents peak during the morning rush (08:00–11:00) and evening rush (17:00–21:00). Conversely, severity peaks in late-night and pre-dawn hours (23:00–04:00) at 81.2%.
-5. **Severity Proportions:** In 2021, severe crashes (Fatal 19.4% + Grievous 48.7%) account for 68.0% of all recorded outcomes.
-6. **Vehicle Impact Heterogeneity:** Heavy commercial vehicles (Trucks: 79.4% severe; Buses: 74.2% severe) display significantly higher severity than passenger cars (52.6%) and auto-rickshaws (48.1%).
-7. **Rainfall Regimes:** Days with moderate-to-heavy rain ($>15.5$ mm/day) produce a 7.2 percentage point increase in severe outcomes over dry periods.
-8. **Darkness Hazard:** Unlit roadways at night produce an 82.5% severe accident rate compared to 64.1% in daylight and 69.3% under operational streetlights.
-9. **Speed Limit Gradient:** Trunk highways and expressways (70 km/h limit) produce a 78.1% severity rate compared to 48.3% on local residential streets (30 km/h limit).
-10. **Geometric Layout:** Grade-separated flyovers and bridges produce elevated severity rates (82.1%), whereas roundabouts show the lowest severity rate (51.2%).
-11. **Hotspot Density Corridors:** Collisions cluster along major radial arterials: Anna Salai, Guindy, Madhavaram, Poonamallee, and Esplanade.
-12. **Geographical Severity Disparity:** Suburban freight-dominated taluks (Madhavaram, Poonamallee) show higher severity rates (>72%) than dense inner-city taluks (Mylapore, Triplicane, ~58%).
+### Source and scope
 
----
+The analysis uses [`chennai_road_crashes_1998_2025.csv`](../data/raw/accidents/chennai_road_crashes_1998_2025.csv), published by Greater Chennai Police through [OpenCity’s Chennai Road Crashes Data page](https://data.opencity.in/dataset/chennai-road-crashes-data). The accompanying [source report](../data/raw/accidents/chennai_road_crashes_1998_2025_report.pdf) documents the published tables and marks the most recent reporting years as provisional.
 
-## 6. Inferential Statistical Analysis & Hypothesis Testing
+The raw table contains **28 rows and 10 columns**, covering 1998–2025. Each row represents an annual report, not an individual collision. The principal count fields are fatal accidents, grievous-injury accidents, minor-injury accidents, non-injury accidents, and total accidents. The table also includes the corresponding person counts.
 
-Hypotheses were tested at a two-tailed significance threshold of $\alpha = 0.05$:
+Weather, road-network, junction, and police-jurisdiction files are present elsewhere in the repository but are not joined to this annual series. Their time and spatial units do not match the annual crash totals, and they do not supply missing crash-level timestamps or coordinates.
 
-### Summary of Hypothesis Testing
+### Preparation steps
 
-| Hypothesis | Investigated Relationship | $\chi^2$ Statistic | df | p-value | Cramér's V | Decision |
-| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **H1** | Severity vs. Lighting Condition | 50.436 | 3 | $6.45 \times 10^{-11}$ | 0.1001 (Moderate) | **Reject Null (Significant)** |
-| **H2** | Severity vs. Rainfall Category | 1.176 | 3 | 0.7589 | 0.0153 (Weak) | **Fail to Reject Null** |
-| **H3** | Severity vs. Vehicle Category | 183.922 | 5 | $7.77 \times 10^{-38}$ | 0.1911 (Moderate) | **Reject Null (Significant)** |
-| **H4** | Severity vs. Junction Type | 152.014 | 4 | $7.54 \times 10^{-32}$ | 0.1738 (Moderate) | **Reject Null (Significant)** |
+1. Read the source CSV without editing it and normalize the year and count fields to numeric types.
+2. Check required columns, missing values, duplicated years, and continuity of the annual sequence.
+3. Derive:
+   - `severe_accidents = fatal_accidents + grievous_accidents`
+   - `severe_share = severe_accidents / total_accidents`
+   - year-over-year percentage change in the published total.
+4. Retain all years. No outlier was deleted or capped: abrupt changes may be meaningful or may reflect changes in recording, and the available metadata cannot distinguish those explanations.
+5. Use the published `Total Accidents` field as the forecast target. No missing values were imputed.
 
-### Baseline Multivariable Logistic Regression Odds Ratios
+### Data-quality checks and decisions
 
-- **Trucks / Lorries:** $OR = 3.50$ ($95\%\text{ CI: } [2.73, 4.48], p < 0.001$) relative to Two-Wheelers.
-- **Pedestrians / Bicycles:** $OR = 2.73$ ($95\%\text{ CI: } [1.94, 3.85], p < 0.001$).
-- **Buses:** $OR = 2.22$ ($95\%\text{ CI: } [1.75, 2.82], p < 0.001$).
-- **Bridges / Flyovers:** $OR = 4.14$ ($95\%\text{ CI: } [3.08, 5.56], p < 0.001$) relative to straight mid-block road segments.
-- **Unlit Darkness:** $OR = 2.31$ ($95\%\text{ CI: } [1.70, 3.14], p < 0.001$) relative to daylight.
+| Check | Finding | Decision |
+|---|---|---|
+| Row count and years | 28 rows, one per year from 1998 to 2025 | Retain the full series. |
+| Missing values in the source table | None | No imputation required. |
+| Duplicate reporting years | None | No row removal required. |
+| Accident-category sum | In 2013, the four category counts sum to 9,705 while the published total is 9,710, a difference of 5. | Preserve the official total and record the discrepancy. |
+| Persons-involved consistency | In 2015, fatal deaths plus grievous- and minor-injury counts sum to 8,206 while “total persons involved” is 7,320, a difference of 886. | Do not use this field for modeling; flag for source clarification. |
+| Latest reporting years | The source report marks recent years as provisional. | Treat 2024–2025 comparisons as subject to revision. |
+
+The annual severe share is a **ratio of aggregate counts**, not the probability that a particular crash is severe. It may also be affected by changes in reporting or injury classification. It is shown descriptively, not interpreted as an individual-level risk measure.
 
 ---
 
-## 7. Machine Learning Model Development & Holdout Evaluation
+## 3. Exploratory data analysis
 
-Four classifiers were trained using strict stratified 80/20 train-test splitting ($N=1,007$ holdout test set) with balanced class weighting:
+### Annual totals
 
-| Model Architecture | Accuracy | ROC-AUC | PR-AUC | Severe Class Recall | Severe Precision | Severe F1 | Macro F1 |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Logistic Regression** | 0.600 | **0.656** | **0.793** | 0.568 | **0.784** | 0.659 | **0.588** |
-| **Random Forest** | 0.596 | 0.614 | 0.771 | 0.639 | 0.732 | 0.683 | 0.563 |
-| **XGBoost** | 0.599 | 0.612 | 0.766 | 0.638 | 0.737 | 0.684 | 0.568 |
-| **Decision Tree** | **0.643** | 0.599 | 0.726 | **0.756** | 0.729 | **0.742** | 0.580 |
+![Annual reported accident totals, with the final holdout period shaded](figures/aggregate_01_annual_accidents.png)
 
-### Model Interpretability via SHAP (XGBoost)
-SHAP summary and beeswarm analyses demonstrate that:
-1. Collisions involving heavy commercial vehicles (Trucks and Buses) exert the strongest positive attribution toward high predicted severity.
-2. Grade-separated structures (Bridges and Flyovers) and four-arm cross junctions are secondary positive drivers.
-3. Unlit nighttime darkness consistently shifts individual prediction probabilities toward severe injury outcomes.
+The highest reported total in the table is **9,710 in 2013**. The lowest is **3,453 in 2022**. The 2025 total is **4,104**, 21.1% lower than the 1998 total of 5,203. The path between these endpoints is not smooth: counts change sharply in several years, including the 2013 peak, the 2020 decline, and the 2022 low. The table alone cannot determine whether those changes reflect travel patterns, policy, reporting practice, or other causes.
 
----
+### Annual fatal-and-grievous share
 
-## 8. Geospatial Hotspot Identification (GIS)
+![Fatal and grievous accident counts as a share of each year's reported total](figures/aggregate_02_severe_share.png)
 
-Haversine DBSCAN spatial clustering ($\epsilon = 0.75\text{ km}, \text{min\_samples} = 40$) isolated **11 distinct empirical crash concentration corridors** in Greater Chennai:
-1. **N1 Royapuram Corridor:** 1,385 recorded crashes (68.5% severe); northern port freight corridor.
-2. **V6 Kolathur Corridor:** 719 recorded crashes (67.5% severe); mixed commercial arterial.
-3. **P6 Kodungaiyur Corridor:** 364 recorded crashes (69.8% severe); northern ring connector.
-4. **E5 Pattinapakkam Corridor:** 362 recorded crashes (71.5% severe); coastal high-speed arterial.
-5. **TIW-Guindy Corridor:** 359 recorded crashes (66.3% severe); major grade-separated transit interchange.
-6. **M1 Madhavaram Corridor:** 346 recorded crashes (65.9% severe); industrial logistics gateway.
-7. **K10 Koyambedu Corridor:** 342 recorded crashes (64.6% severe); central bus terminal and wholesale market hub.
-8. **R4 Pondy Bazaar Corridor:** 328 recorded crashes (68.9% severe); high-density retail center.
-9. **S8 Adambakkam Corridor:** 320 recorded crashes (70.3% severe); southern suburban arterial.
-10. **F1 Chintadripet Corridor:** 291 recorded crashes (65.3% severe); inner-city central interchange.
+The derived aggregate share varies substantially. It is 46.0% in 1998, 12.2% in 2000, 72.9% in 2017, 68.0% in 2021, and 43.7% in 2025. The particularly large changes across years—including the 2024–2025 change—should not be read as a measured change in an individual driver’s or crash’s severity risk. The source’s provisional status and the absence of documentation on year-to-year classification consistency limit that interpretation.
 
-All hotspots are cataloged in `results/metrics/geospatial_hotspots_summary.csv` and rendered in the interactive Folium HTML map (`results/maps/chennai_accident_hotspots_interactive_map.html`).
+### EDA conclusions
+
+- The official series supports a description of **reported annual counts** and aggregate category composition.
+- The data show large temporal variation, so a single straight-line trend is unlikely to describe the whole period well.
+- The severe-share series has sharp discontinuities. Until reporting definitions are verified, those discontinuities are a data-quality finding as well as an observed pattern.
+- No conclusions about time of day, weather, vehicle type, lighting, road design, or geographic hotspots can be drawn from this annual table.
 
 ---
 
-## 9. Evidence-Based Countermeasures & Policy Recommendations
+## 4. Modelling design
 
-Based directly on our empirical statistical and spatial models:
-1. **Targeted Street Lighting on High-Speed Corridors:** With darkness presenting an adjusted $OR = 2.31$ for severe injury, high-pressure sodium or LED lighting installation along unlit peripheral highways represents the most cost-effective physical intervention.
-2. **Freight Separation & Speed Governance:** Trucks and buses produce severe injury odds over 3.0 times higher than smaller passenger vehicles. Implementing dedicated nighttime freight corridors and automated speed enforcement will reduce impact kinetic energy.
-3. **Flyover Approach Safety Geometry:** Because grade-separated flyover segments exhibit $OR = 4.14$, road authorities should deploy high-friction surface treatments, optical speed-reduction markings, and impact-absorbing crash cushions at ramp bifurcation points.
-4. **Roundabout Conversions:** Replacing uncontrolled 4-arm cross intersections with modern roundabouts reduces conflict angles and lowers injury severity.
+### Forecasting target and split
+
+The forecasting target is the annual `Total Accidents` count. To prevent future years from leaking into training, the split is chronological:
+
+- **Training:** 1998–2020 (23 annual observations).
+- **Final holdout:** 2021–2025 (5 annual observations).
+- **Rolling-origin validation:** one-year-ahead forecasts for 2010–2020. For each validation year, the model is fit only on earlier years, then predicts the next year.
+
+No random split or shuffling is used. The fixed split makes the evaluation reproducible and resembles the real forecasting direction. Because the holdout has only five years, scores should be treated as descriptive for this series, not as precise estimates of future performance.
+
+### Models
+
+1. **Last-year persistence baseline:** predicts the previous observed count for the next year. For the fixed 2021–2025 holdout forecast made from 2020, it holds the 2020 value of 4,390 constant across all five forecast years.
+2. **Linear trend:** ordinary least squares using reporting year as the sole predictor of annual total.
+3. **Poisson trend:** a Poisson regression with a log link and reporting year as the sole predictor. It is included because the outcome is a nonnegative count.
+
+These intentionally simple approaches are proportionate to a 28-row annual dataset. The models do not include policy, population, traffic exposure, or changes in recording practice. The objective is to test whether a simple trend improves on a naive baseline, not to make causal claims.
+
+### Evaluation metrics
+
+- **MAE:** average absolute error in accidents; directly interpretable in count units.
+- **RMSE:** gives larger forecast errors more weight.
+- **MAPE:** average absolute percentage error; all observed totals are nonzero, so it is defined here.
 
 ---
 
-## 10. Research Limitations
+## 5. Results and evaluation
 
-1. **Absence of Link-Level Exposure (AADT):** Traffic volume counts are unavailable across every road link. Consequently, high-density areas represent empirical collision concentrations, not absolute risk per vehicle-kilometer.
-2. **Police Underreporting of Minor Crashes:** As property damage collisions frequently go unrecorded, non-injury crashes are underrepresented relative to hospitalized casualties.
-3. **Observational Inference:** Regression and machine learning associations do not constitute clinical or physical causation.
+### Rolling-origin validation: 2010–2020
+
+| Model | MAE | RMSE | MAPE |
+|---|---:|---:|---:|
+| Last-year persistence baseline | 993 | 1,459 | 14.9% |
+| Linear trend | 1,767 | 2,080 | 26.2% |
+| Poisson trend | 1,918 | 2,216 | 28.7% |
+
+The persistence baseline has the lowest error on these 11 one-year-ahead validation forecasts. Both trend models perform worse, indicating that a smooth trend did not add reliable predictive value in this validation period.
+
+### Final chronological holdout: 2021–2025
+
+| Model | MAE | RMSE | MAPE |
+|---|---:|---:|---:|
+| Last-year persistence baseline | **646** | **680** | **16.7%** |
+| Linear trend | 4,428 | 4,479 | 114.6% |
+| Poisson trend | 4,734 | 4,789 | 122.4% |
+
+![Observed holdout counts and forecasts from the three models](figures/aggregate_03_holdout_forecasts.png)
+
+| Year | Observed | Persistence | Linear trend | Poisson trend |
+|---:|---:|---:|---:|---:|
+| 2021 | 5,035 | 4,390 | 8,128 | 8,321 |
+| 2022 | 3,453 | 4,390 | 8,279 | 8,523 |
+| 2023 | 3,654 | 4,390 | 8,430 | 8,731 |
+| 2024 | 3,763 | 4,390 | 8,581 | 8,943 |
+| 2025 | 4,104 | 4,390 | 8,732 | 9,160 |
+
+The linear and Poisson trend models forecast rising counts of roughly 8,100–9,200 per year, far above the observed 2021–2025 totals. Their percentage errors exceed 100%. The persistence baseline predicts 4,390 for each holdout year and is substantially closer on average. This does not establish that persistence is a dependable forecasting system: the holdout is short, the source’s later years are provisional, and structural changes can make any historical rule fail.
+
+### Error interpretation
+
+The trend models extrapolate the higher counts present in much of their training period. The observed 2021–2025 counts remain well below that extrapolated trajectory. The large errors expose a weakness of fitting smooth trends across a series with sharp level changes. The baseline’s better result is a useful benchmark, not evidence that prior-year counts cause or explain later counts.
+
+No model was selected for operational deployment. No SHAP values, classification accuracy, ROC-AUC, or crash-level confusion matrix are reported here because those metrics would rely on the generated event-level dataset rather than the official annual observations.
+
+---
+
+## 6. Interpretation, limitations, and next steps
+
+### What the evidence supports
+
+The source supports statements about how many accidents were reported in each year, how the published annual categories add up, and how simple year-only forecasts performed under a chronological evaluation. The forecasting comparison suggests that linear and Poisson extrapolation are poor choices for this short series as currently recorded.
+
+### What the evidence does not support
+
+This analysis cannot establish:
+
+- crash-level risk factors or causal effects;
+- severity probability for an individual crash;
+- hourly, daily, or weather-related crash patterns;
+- empirical crash locations or hotspot corridors;
+- crash rates per vehicle, road length, or vehicle-kilometre;
+- validated forecasts suitable for traffic-safety planning.
+
+These questions require incident-level observations and, for risk rates, suitable exposure denominators. Daily NASA weather data and OpenStreetMap geometry cannot be joined to an annual city total as if they described each crash.
+
+### Limitations
+
+1. **Aggregation:** only 28 annual observations are available; within-year variation is hidden.
+2. **Source inconsistencies:** the 2013 accident-category total differs from the reported total, and the 2015 persons-involved fields disagree materially.
+3. **Provisional values:** the source report marks recent values provisional and they may change.
+4. **Unknown comparability:** the table does not document whether recording definitions and coverage remained stable through the full period.
+5. **Short evaluation window:** the final test consists of five years, so performance estimates are uncertain.
+6. **No exposure denominator:** totals cannot be interpreted as relative risk across years or locations without traffic exposure data.
+
+### Next steps
+
+1. Ask the data publisher or Greater Chennai Police for documentation of category definitions, the 2013 and 2015 discrepancies, and the status of the latest years.
+2. Seek genuine incident-level records containing crash date/time, location, severity, and vehicle information. If unavailable, keep the project framed as annual aggregate analysis.
+3. If incident records become available, validate provenance and coding first, then build a new crash-level analysis. Do not reuse the synthetic rows as observations.
+4. Obtain traffic exposure data before making comparative risk claims.
+5. Repeat the forecasting evaluation when additional stable annual observations become available.
+
+---
+
+## 7. Reproducibility and code
+
+The figures, annual derived table, rolling validation predictions, final holdout predictions, and model-comparison table are regenerated from the raw CSV by:
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/build_aggregate_report.py
+```
+
+The analysis script is [`scripts/build_aggregate_report.py`](../scripts/build_aggregate_report.py). It reads the official raw annual table, checks required fields and year continuity, calculates aggregate features, performs the fixed chronological evaluation, and writes outputs to `reports/figures/` and `results/metrics/`. The script does not load `chennai_accident_severity_modeling_dataset.csv` or the saved event-level models. The procedure is deterministic and uses no random split, so a random seed is not applicable.
+
+This reproducible analysis command is separate from the older full-pipeline runner. The latter still has a known collector method-name mismatch noted in [`DATA_INTEGRITY_NOTICE.md`](../DATA_INTEGRITY_NOTICE.md); do not treat the entire legacy pipeline as verified end to end.
+
+---
+
+## 8. Conclusion
+
+The available official Chennai data supports a careful study of annual reported accident counts, but not the event-level questions claimed by the legacy project outputs. The annual series has major fluctuations and known internal inconsistencies. In a chronological forecasting comparison, the last-year baseline outperformed both linear and Poisson trend models on rolling validation and the five-year holdout. The result argues for restraint: neither smooth trend extrapolation nor the current event-level synthetic model should be presented as a reliable basis for road-safety decisions. Authentic incident-level data, clarified source definitions, and exposure measures are the necessary next steps for a defensible crash-risk study.
+
+---
+
+## References
+
+1. Greater Chennai Police, *Chennai Road Crashes Data, 1998–2025*, published through [OpenCity](https://data.opencity.in/dataset/chennai-road-crashes-data). Local source files: [`CSV`](../data/raw/accidents/chennai_road_crashes_1998_2025.csv) and [`official report PDF`](../data/raw/accidents/chennai_road_crashes_1998_2025_report.pdf).
+2. Greater Chennai Police and OpenCity source metadata: [`DATA_SOURCES.md`](../DATA_SOURCES.md).
+3. Project data-integrity limitations: [`DATA_INTEGRITY_NOTICE.md`](../DATA_INTEGRITY_NOTICE.md).
