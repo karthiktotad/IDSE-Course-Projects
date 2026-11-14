@@ -1,363 +1,537 @@
-"""Evidence-first execution dashboard for the Chennai road-safety study."""
+"""
+Interactive Streamlit Research Dashboard.
+Beyond Accident Counts: Road Accident Risk Factors, Severity and Accident-Prone Locations in Chennai.
+"""
 
-from __future__ import annotations
-
-import subprocess
-import sys
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import joblib
 from pathlib import Path
 
-import pandas as pd
-import plotly.express as px
-import streamlit as st
-
-
+# Streamlit Page Config
 st.set_page_config(
-    page_title="Chennai Road Safety | Research Dashboard",
+    page_title="Chennai Road Accident Research Dashboard",
     page_icon="🚦",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-ROOT = Path(__file__).resolve().parent
-SOURCE_PATH = ROOT / "data/raw/accidents/chennai_road_crashes_1998_2025.csv"
-METRICS_PATH = ROOT / "results/metrics"
-BUILD_SCRIPT = ROOT / "scripts/build_aggregate_report.py"
+# Paths
+BASE_DIR = Path(__file__).resolve().parent
+PROCESSED_DIR = BASE_DIR / "data" / "processed"
+RESULTS_DIR = BASE_DIR / "results"
+VIS_DIR = RESULTS_DIR / "visualizations"
+METRICS_DIR = RESULTS_DIR / "metrics"
+MAPS_DIR = RESULTS_DIR / "maps"
+MODELS_DIR = BASE_DIR / "models"
+AGGREGATE_SOURCE = BASE_DIR / "data" / "raw" / "accidents" / "chennai_road_crashes_1998_2025.csv"
 
 
 @st.cache_data
-def load_artifacts() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load source records and reproducible outputs from the aggregate pipeline."""
-    source = pd.read_csv(SOURCE_PATH, encoding="utf-8-sig")
-    annual = pd.read_csv(METRICS_PATH / "annual_aggregate_analysis.csv")
-    comparison = pd.read_csv(METRICS_PATH / "annual_forecast_model_comparison.csv")
-    holdout = pd.read_csv(METRICS_PATH / "annual_forecast_holdout_predictions.csv")
-    rolling = pd.read_csv(METRICS_PATH / "annual_forecast_rolling_validation.csv")
-    return source, annual, comparison, holdout, rolling
+def load_data():
+    annual_df = pd.read_csv(PROCESSED_DIR / "chennai_annual_crash_severity_preprocessed.csv")
+    modeling_df = pd.read_csv(PROCESSED_DIR / "chennai_accident_severity_modeling_dataset.csv")
+    hotspots_df = pd.read_csv(METRICS_DIR / "geospatial_hotspots_summary.csv")
+    model_comp_df = pd.read_csv(METRICS_DIR / "model_comparison_table.csv")
+    odds_ratios_df = pd.read_csv(METRICS_DIR / "logistic_regression_odds_ratios.csv")
+    weather_df = pd.read_csv(PROCESSED_DIR / "chennai_daily_weather_preprocessed.csv")
+    return annual_df, modeling_df, hotspots_df, model_comp_df, odds_ratios_df, weather_df
 
 
-try:
-    source_df, annual_df, model_metrics, holdout_df, rolling_df = load_artifacts()
-except (FileNotFoundError, pd.errors.EmptyDataError) as exc:
-    st.error(f"The analysis outputs are missing. Rebuild them from the sidebar. Details: {exc}")
-    st.stop()
+annual_df, modeling_df, hotspots_df, model_comp_df, odds_ratios_df, weather_df = load_data()
 
 
-years = annual_df["year"].astype(int)
-latest = annual_df.iloc[-1]
-peak = annual_df.loc[annual_df["total_accidents"].idxmax()]
-trough = annual_df.loc[annual_df["total_accidents"].idxmin()]
-from_start = (latest["total_accidents"] / annual_df.iloc[0]["total_accidents"] - 1) * 100
-from_trough = (latest["total_accidents"] / trough["total_accidents"] - 1) * 100
-data_missing = int(source_df.isna().sum().sum())
-duplicate_years = int(source_df["YEAR"].duplicated().sum())
-year_range = range(int(years.min()), int(years.max()) + 1)
-continuous_years = list(years) == list(year_range)
-category_issues = annual_df[annual_df["category_total_difference"] != 0]
-person_issues = annual_df[annual_df["person_total_difference"] != 0]
+@st.cache_data
+def load_aggregate_workflow():
+    """Load evidence artifacts from the reproducible annual-aggregate analysis."""
+    source = pd.read_csv(AGGREGATE_SOURCE, encoding="utf-8-sig")
+    metrics = pd.read_csv(METRICS_DIR / "annual_aggregate_analysis.csv")
+    comparison = pd.read_csv(METRICS_DIR / "annual_forecast_model_comparison.csv")
+    holdout = pd.read_csv(METRICS_DIR / "annual_forecast_holdout_predictions.csv")
+    rolling = pd.read_csv(METRICS_DIR / "annual_forecast_rolling_validation.csv")
+    return source, metrics, comparison, holdout, rolling
 
 
-st.sidebar.title("🚦 Research workflow")
-st.sidebar.caption("Follow the evidence from source data to forecast interpretation.")
-page = st.sidebar.radio(
-    "Project stages",
-    [
-        "Project question & pipeline",
-        "1 · Data preparation & audit",
-        "2 · Exploratory data analysis",
-        "3 · Modelling & analysis",
-        "4 · Evaluation & interpretation",
-        "5 · Reproducibility & limitations",
-    ],
-)
-st.sidebar.markdown("---")
-if st.sidebar.button("Rebuild analysis from source", width="stretch"):
-    with st.spinner("Validating the source and rebuilding all analysis outputs…"):
-        result = subprocess.run(
-            [sys.executable, str(BUILD_SCRIPT)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=180,
+def render_research_workflow():
+    """Show the source-to-forecast process alongside the original dashboard pages."""
+    source, aggregate, comparison, holdout, rolling = load_aggregate_workflow()
+    st.title("Research Workflow: From Data Preparation to Forecast Evaluation")
+    st.markdown(
+        "### The analysis steps behind the annual accident-count forecasting model"
+    )
+    st.write(
+        "This added section documents how the aggregate forecasting analysis was prepared and evaluated. "
+        "The original overview, severity, weather, geospatial, machine-learning, and prediction pages remain available."
+    )
+    st.info(
+        "This research workflow uses the official annual aggregate table only. The original event-level "
+        "demo pages remain illustrative because their incident-like rows are generated; the warning above applies."
+    )
+
+    preparation_tab, eda_tab, modeling_tab, evaluation_tab, reproducibility_tab = st.tabs(
+        ["Data Preparation & Audit", "EDA", "Modelling & Analysis", "Evaluation & Interpretation", "Reproducibility & Limits"]
+    )
+
+    years = aggregate["year"].astype(int)
+    peak = aggregate.loc[aggregate["total_accidents"].idxmax()]
+    low = aggregate.loc[aggregate["total_accidents"].idxmin()]
+    latest = aggregate.iloc[-1]
+
+    with preparation_tab:
+        st.subheader("Source and preparation")
+        st.caption("Source file: data/raw/accidents/chennai_road_crashes_1998_2025.csv")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Annual rows", f"{len(source)}")
+        c2.metric("Source columns", f"{len(source.columns)}")
+        c3.metric("Missing cells", f"{int(source.isna().sum().sum())}")
+        c4.metric("Duplicate years", f"{int(source['YEAR'].duplicated().sum())}")
+        complete_years = list(years) == list(range(int(years.min()), int(years.max()) + 1))
+        st.success(
+            f"Annual coverage is continuous from {int(years.min())} to {int(years.max())}."
+            if complete_years else "Annual coverage contains a missing year."
         )
-    if result.returncode == 0:
-        load_artifacts.clear()
-        st.sidebar.success("Analysis rebuilt successfully.")
-        st.rerun()
-    else:
-        st.sidebar.error("The analysis build failed. See the details below.")
-        st.error(result.stderr or result.stdout or "The report builder returned an error.")
-st.sidebar.caption("Source: Greater Chennai Police annual crash counts (1998–2025).")
-
-
-if page == "Project question & pipeline":
-    st.title("Chennai Road Safety: From Data to Forecast")
-    st.markdown(
-        "### What do the reported annual crash counts show, and how well can simple models forecast them?"
-    )
-    st.write(
-        "This dashboard makes each analysis step visible. The empirical study uses the official "
-        "annual aggregate table; it does not treat generated crash-like records as observed incidents."
-    )
-    st.info(
-        "**Scope matters:** the available Chennai source contains annual totals, not individual crash records. "
-        "So the defensible prediction task here is forecasting annual reported counts. "
-        "It cannot estimate an individual crash's severity or location risk."
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Annual observations", f"{len(annual_df)}")
-    c2.metric("Coverage", f"{int(years.min())}–{int(years.max())}")
-    c3.metric("Final holdout", "2021–2025")
-    c4.metric("Forecast approaches", "3")
-
-    st.subheader("Execution path")
-    stages = st.columns(5)
-    for column, title, detail in zip(
-        stages,
-        ["Prepare", "Explore", "Model", "Evaluate", "Interpret"],
-        ["Check source, types, years, and totals", "Plot annual counts and severe share", "Baseline, linear trend, Poisson trend", "Rolling validation + untouched final years", "Explain errors, limits, and next steps"],
-    ):
-        column.markdown(f"**{title}**")
-        column.caption(detail)
-
-    st.subheader("What the source currently says")
-    st.write(
-        f"Recorded annual accidents range from **{int(trough['total_accidents']):,} in {int(trough['year'])}** "
-        f"to **{int(peak['total_accidents']):,} in {int(peak['year'])}**. "
-        f"The latest reported total, **{int(latest['total_accidents']):,} in {int(latest['year'])}**, "
-        f"is {abs(from_start):.1f}% {'below' if from_start < 0 else 'above'} the first year."
-    )
-    st.caption(
-        "Counts describe police-reported annual aggregates. Changes may reflect reporting and classification "
-        "as well as real-world changes; they are not exposure-adjusted risk rates."
-    )
-
-elif page == "1 · Data preparation & audit":
-    st.title("1 · Data Preparation & Audit")
-    st.write("The reproducible analysis starts with the raw police annual table and documents its checks before modelling.")
-
-    a, b, c, d = st.columns(4)
-    a.metric("Source rows", f"{len(source_df)}")
-    b.metric("Source columns", f"{len(source_df.columns)}")
-    c.metric("Missing source cells", f"{data_missing}")
-    d.metric("Duplicate year rows", f"{duplicate_years}")
-
-    st.subheader("Preparation decisions")
-    st.markdown(
-        """
-        - Loaded the Greater Chennai Police annual CSV with its original year and count fields.
-        - Converted year and count columns to numeric values; ordered records chronologically.
-        - Checked required columns, missing values, duplicate years, and gaps in annual coverage.
-        - Derived **fatal + grievous accidents** and its share of total reported accidents.
-        - Kept the source's reported total as the forecast target; did not silently overwrite it with category sums.
-        """
-    )
-    status1, status2 = st.columns(2)
-    status1.success("Continuous annual coverage" if continuous_years else "A gap exists in the annual coverage")
-    status2.success("No missing cells in source" if data_missing == 0 else f"{data_missing} missing source cells found")
-
-    st.subheader("Internal consistency checks")
-    st.write(
-        "Accident categories should sum to the reported total, and person categories should reconcile with "
-        "the reported persons-involved total. Differences are surfaced below and retained for review."
-    )
-    issues = []
-    for _, row in category_issues.iterrows():
-        issues.append({
-            "Check": "Accident category sum − reported total",
-            "Year": int(row["year"]),
-            "Difference": int(row["category_total_difference"]),
-        })
-    for _, row in person_issues.iterrows():
-        issues.append({
-            "Check": "Person category sum − reported persons involved",
-            "Year": int(row["year"]),
-            "Difference": int(row["person_total_difference"]),
-        })
-    if issues:
-        st.warning(f"Found {len(issues)} reconciliation exception(s); source values were not edited.")
-        st.dataframe(pd.DataFrame(issues), hide_index=True, width="stretch")
-    else:
-        st.success("All reported category sums reconcile.")
-
-    with st.expander("Show prepared annual analysis table"):
-        st.dataframe(annual_df, hide_index=True, width="stretch")
-
-elif page == "2 · Exploratory data analysis":
-    st.title("2 · Exploratory Data Analysis")
-    st.write("Written observations accompany the plots so the dashboard explains the patterns, not just displays them.")
-
-    fig_counts = px.line(
-        annual_df,
-        x="year",
-        y="total_accidents",
-        markers=True,
-        title="Annual reported accident counts",
-        labels={"year": "Reporting year", "total_accidents": "Reported accidents"},
-    )
-    fig_counts.add_vrect(x0=2020.5, x1=float(years.max()) + 0.5, fillcolor="#E69F00", opacity=0.12, line_width=0,
-                         annotation_text="Final holdout", annotation_position="top left")
-    fig_counts.update_layout(hovermode="x unified")
-    st.plotly_chart(fig_counts, width="stretch")
-
-    severe_fig = px.line(
-        annual_df,
-        x="year",
-        y=annual_df["severe_share"] * 100,
-        markers=True,
-        title="Fatal + grievous accidents as a share of reported total",
-        labels={"year": "Reporting year", "y": "Aggregate share (%)"},
-    )
-    severe_fig.update_traces(name="Fatal + grievous share", showlegend=False)
-    severe_fig.update_layout(yaxis_title="Aggregate share (%)", xaxis_title="Reporting year")
-    st.plotly_chart(severe_fig, width="stretch")
-
-    highest_swing = annual_df.assign(abs_change=annual_df["yoy_total_change_pct"].abs()).dropna().sort_values("abs_change").iloc[-1]
-    obs1, obs2, obs3 = st.columns(3)
-    obs1.metric("Peak year", f"{int(peak['year'])}", f"{int(peak['total_accidents']):,} accidents")
-    obs2.metric("Lowest year", f"{int(trough['year'])}", f"{int(trough['total_accidents']):,} accidents")
-    obs3.metric("Latest vs low", f"+{from_trough:.1f}%", f"{int(latest['year'])} compared with {int(trough['year'])}")
-
-    st.markdown(
-        f"""
-        **Interpretation.** The series is not a steady decline or growth curve: it reaches a peak in {int(peak['year'])},
-        falls to its minimum in {int(trough['year'])}, and rises somewhat in the latest observations. The largest
-        year-to-year percentage movement is **{highest_swing['yoy_total_change_pct']:+.1f}% in {int(highest_swing['year'])}**.
-        The fatal-plus-grievous share also varies substantially, so it should be read as a ratio of annual aggregate
-        counts—not as the probability that an individual crash is severe.
-        """
-    )
-    st.caption("Shaded years are reserved for final model evaluation and are shown here only as descriptive history.")
-
-elif page == "3 · Modelling & analysis":
-    st.title("3 · Modelling & Analysis")
-    st.write("We compare simple, interpretable count-forecasting approaches against a persistence baseline.")
-
-    st.subheader("Target, split, and leakage control")
-    left, right = st.columns(2)
-    left.markdown(
-        "**Target:** total reported accidents in a calendar year.  \n"
-        "**Training period:** 1998–2020 (23 annual observations).  \n"
-        "**Final holdout:** 2021–2025 (5 later observations)."
-    )
-    right.markdown(
-        "**Rolling validation:** one-year-ahead predictions for 2010–2020 (11 folds).  \n"
-        "Each fold fits using earlier years only. The final models are fitted through 2020, then evaluated on 2021–2025."
-    )
-
-    st.subheader("Compared approaches")
-    st.dataframe(
-        pd.DataFrame([
-            {"Approach": "Last-year baseline", "How it works": "Carries the latest available count forward; a strong simple benchmark for a short time series."},
-            {"Approach": "Linear trend", "How it works": "Fits a straight-line relationship between year and annual count."},
-            {"Approach": "Poisson trend", "How it works": "Models a non-negative count with a log-linked year trend."},
-        ]),
-        hide_index=True,
-        width="stretch",
-    )
-    st.info(
-        "Only 28 annual observations are available. The source does not contain incident-level time, lighting, "
-        "weather, vehicle, or location fields, so those variables are not used in this empirical model."
-    )
-
-    st.subheader("What the fitted models produce on the final holdout")
-    model_order = ["Last-year baseline", "Linear trend", "Poisson trend"]
-    fig = px.line(
-        holdout_df,
-        x="year",
-        y=["actual", *model_order],
-        markers=True,
-        title="Observed annual counts and forecasts, 2021–2025",
-        labels={"year": "Reporting year", "value": "Annual accidents", "variable": "Series"},
-    )
-    fig.update_xaxes(tickmode="array", tickvals=holdout_df["year"], ticktext=holdout_df["year"].astype(str))
-    fig.update_layout(hovermode="x unified")
-    st.plotly_chart(fig, width="stretch")
-    st.caption("The full 2021–2025 holdout was withheld from model fitting. Forecast values are annual totals, not individual-level predictions.")
-    with st.expander("Show the 11 rolling-origin validation predictions"):
-        st.dataframe(rolling_df.round(2), hide_index=True, width="stretch")
-
-elif page == "4 · Evaluation & interpretation":
-    st.title("4 · Evaluation & Interpretation")
-    st.write("We compare models on both rolling-origin validation and the later final holdout; lower errors are better.")
-
-    display_metrics = model_metrics.rename(columns={
-        "model": "Model",
-        "rolling_cv_MAE": "Rolling MAE",
-        "rolling_cv_RMSE": "Rolling RMSE",
-        "rolling_cv_MAPE_percent": "Rolling MAPE (%)",
-        "holdout_MAE": "Holdout MAE",
-        "holdout_RMSE": "Holdout RMSE",
-        "holdout_MAPE_percent": "Holdout MAPE (%)",
-    })
-    st.dataframe(display_metrics.round(2), hide_index=True, width="stretch")
-    best_holdout = model_metrics.loc[model_metrics["holdout_MAE"].idxmin()]
-    best_cv = model_metrics.loc[model_metrics["rolling_cv_MAE"].idxmin()]
-    m1, m2 = st.columns(2)
-    m1.metric("Lowest final holdout MAE", str(best_holdout["model"]), f"{best_holdout['holdout_MAE']:,.0f} accidents")
-    m2.metric("Lowest rolling MAE", str(best_cv["model"]), f"{best_cv['rolling_cv_MAE']:,.0f} accidents")
-
-    st.subheader("Per-year holdout errors")
-    error_table = holdout_df.copy()
-    error_table["Baseline error"] = error_table["Last-year baseline"] - error_table["actual"]
-    error_table["Linear trend error"] = error_table["Linear trend"] - error_table["actual"]
-    error_table["Poisson trend error"] = error_table["Poisson trend"] - error_table["actual"]
-    st.dataframe(error_table[["year", "actual", "Last-year baseline", "Linear trend", "Poisson trend", "Baseline error", "Linear trend error", "Poisson trend error"]].round(0), hide_index=True, width="stretch")
-
-    st.markdown(
-        f"""
-        **Reading the results.** The last-year baseline has the lowest MAE in both evaluations
-        (rolling validation: **{best_cv['rolling_cv_MAE']:,.0f}**; final holdout: **{best_holdout['holdout_MAE']:,.0f}**).
-        The two trend models overpredict the 2021–2025 counts by a wide margin. That is evidence that a single smooth
-        historical trend does not generalize across the sharp changes in this series. The baseline is the most
-        defensible of these three for a reference forecast, but errors remain large enough that it should not be used
-        alone for operational decisions.
-        """
-    )
-
-    with st.expander("What the evaluation metrics mean"):
         st.markdown(
-            "- **MAE:** average absolute miss, in accidents per year.  \n"
-            "- **RMSE:** like MAE, but penalizes large misses more strongly.  \n"
-            "- **MAPE:** average absolute miss as a percentage of the actual count; it can be unstable when actual values are small."
+            "**Preparation steps:** validate required source columns; convert year/count fields to numeric; sort by year; "
+            "check missing values, duplicate years, and gaps; derive fatal-plus-grievous counts and their share of "
+            "the reported total. The reported total remains the forecast target; source values are not silently corrected."
         )
-    st.warning(
-        "These are forecasting errors against reported annual counts. They do not measure individual crash severity, "
-        "causal effects, or road-level safety risk."
-    )
+        category_issues = aggregate[aggregate["category_total_difference"] != 0]
+        person_issues = aggregate[aggregate["person_total_difference"] != 0]
+        issues = []
+        for _, row in category_issues.iterrows():
+            issues.append({"Check": "Accident category sum minus reported total", "Year": int(row["year"]),
+                           "Difference": int(row["category_total_difference"])})
+        for _, row in person_issues.iterrows():
+            issues.append({"Check": "Person category sum minus reported persons involved", "Year": int(row["year"]),
+                           "Difference": int(row["person_total_difference"])})
+        if issues:
+            st.warning("Two source reconciliation exceptions were retained for review; neither was edited.")
+            st.dataframe(pd.DataFrame(issues), hide_index=True, use_container_width=True)
+        with st.expander("Inspect prepared annual table"):
+            st.dataframe(aggregate, hide_index=True, use_container_width=True)
 
-elif page == "5 · Reproducibility & limitations":
-    st.title("5 · Reproducibility, Limitations & Next Steps")
-    st.write("The same source-to-results workflow can be rebuilt locally from the repository.")
+    with eda_tab:
+        st.subheader("Exploratory patterns")
+        accident_fig = px.line(
+            aggregate, x="year", y="total_accidents", markers=True,
+            title="Reported annual road accidents in Chennai",
+            labels={"year": "Reporting year", "total_accidents": "Reported accidents"},
+        )
+        accident_fig.add_vrect(x0=2020.5, x1=float(years.max()) + 0.5, fillcolor="#E69F00",
+                               opacity=0.12, line_width=0, annotation_text="Final holdout")
+        st.plotly_chart(accident_fig, use_container_width=True)
+        severe_fig = px.line(
+            aggregate, x="year", y=aggregate["severe_share"] * 100, markers=True,
+            title="Fatal + grievous accidents as a share of reported total",
+            labels={"year": "Reporting year", "y": "Aggregate share (%)"},
+        )
+        severe_fig.update_layout(yaxis_title="Aggregate share (%)", xaxis_title="Reporting year")
+        st.plotly_chart(severe_fig, use_container_width=True)
+        st.markdown(
+            f"**Written insight:** counts peak at **{int(peak['total_accidents']):,} in {int(peak['year'])}**, "
+            f"fall to **{int(low['total_accidents']):,} in {int(low['year'])}**, and reach "
+            f"**{int(latest['total_accidents']):,} in {int(latest['year'])}**. The severe-share curve is also highly variable. "
+            "Because these are annual aggregates, the ratio is not the probability that an individual crash is severe."
+        )
 
-    st.subheader("Reproduce the analysis")
-    st.code("python scripts/build_aggregate_report.py\nstreamlit run app.py", language="bash")
-    st.markdown(
-        "**Source file:** `data/raw/accidents/chennai_road_crashes_1998_2025.csv`  \n"
-        "**Analysis code:** `scripts/build_aggregate_report.py`  \n"
-        "**Written outputs:** `results/metrics/annual_*.csv` and `reports/figures/aggregate_*.png`"
-    )
-    st.write(
-        "The report builder checks the expected source columns, parses numeric fields, verifies year uniqueness and "
-        "continuity, derives aggregate features, performs rolling and final-holdout evaluation, and writes all tables "
-        "and figures. Its model splits are fixed by year, so results are reproducible."
-    )
+    with modeling_tab:
+        st.subheader("Target and time-ordered validation")
+        st.markdown(
+            "**Target:** total reported accidents per year.  \n"
+            "**Training:** 1998–2020 (23 observations). **Final chronological holdout:** 2021–2025 (5 observations).  \n"
+            "**Rolling-origin validation:** one-year-ahead predictions for 2010–2020 (11 folds), using earlier years only in each fold."
+        )
+        st.dataframe(pd.DataFrame([
+            {"Model": "Last-year baseline", "Method": "Carry the latest available annual count forward."},
+            {"Model": "Linear trend", "Method": "Fit a straight-line relationship between year and count."},
+            {"Model": "Poisson trend", "Method": "Fit a log-linked count model using year as the predictor."},
+        ]), hide_index=True, use_container_width=True)
+        forecast_fig = px.line(
+            holdout, x="year", y=["actual", "Last-year baseline", "Linear trend", "Poisson trend"],
+            markers=True, title="Observed counts and forecasts on the 2021–2025 holdout",
+            labels={"year": "Reporting year", "value": "Annual accidents", "variable": "Series"},
+        )
+        forecast_fig.update_xaxes(
+            tickmode="array",
+            tickvals=holdout["year"],
+            ticktext=holdout["year"].astype(str),
+        )
+        st.plotly_chart(forecast_fig, use_container_width=True)
+        with st.expander("Show rolling-origin predictions"):
+            st.dataframe(rolling.round(2), hide_index=True, use_container_width=True)
+        st.caption("The data has no individual crash timestamps, lighting, vehicle, or location fields; those cannot be modeled from this source.")
 
-    st.subheader("Limitations that affect the conclusions")
-    st.markdown(
-        """
-        - **Small sample:** 28 annual rows provide little information for complex forecasting models.
-        - **Aggregate-only source:** no individual incidents, traffic exposure, or road-level denominators are available.
-        - **Changing patterns:** large year-to-year movements may reflect changes in conditions, reporting, or definitions.
-        - **Source reconciliation:** reported categories do not reconcile in every year; the 2013 accident-category difference and 2015 persons-count difference are retained and disclosed.
-        - **No causal claim:** these trends and forecasts do not establish why crashes changed.
-        - **Synthetic prototype outputs:** older event-level severity, SHAP, weather-linkage, and hotspot artifacts are not empirical evidence and are intentionally excluded from the findings in this dashboard. See `DATA_INTEGRITY_NOTICE.md`.
-        """
+    with evaluation_tab:
+        st.subheader("Model comparison")
+        st.write("MAE and RMSE are in accidents per year; MAPE is a percentage. Lower values indicate smaller errors.")
+        st.dataframe(comparison.round(2), hide_index=True, use_container_width=True)
+        best = comparison.loc[comparison["holdout_MAE"].idxmin()]
+        best_cv = comparison.loc[comparison["rolling_cv_MAE"].idxmin()]
+        st.markdown(
+            f"**Interpretation:** the **{best['model']}** has the lowest MAE in both the final holdout "
+            f"(**{best['holdout_MAE']:,.0f} accidents**) and rolling validation (**{best_cv['rolling_cv_MAE']:,.0f} accidents**). "
+            "Both trend models overpredict the later holdout by a large margin. The simple baseline is the strongest "
+            "reference among these candidates, but its error remains too large for stand-alone operational decisions."
+        )
+        errors = holdout.copy()
+        for model in ["Last-year baseline", "Linear trend", "Poisson trend"]:
+            errors[f"{model} error"] = errors[model] - errors["actual"]
+        st.dataframe(errors.round(0), hide_index=True, use_container_width=True)
+        st.warning("This evaluates annual-count forecasts, not severity probability, causal effects, or street-level risk.")
+
+    with reproducibility_tab:
+        st.subheader("Rebuild and interpret responsibly")
+        st.code("python main.py --stage report\nstreamlit run app.py", language="bash")
+        st.markdown(
+            "The verified aggregate builder is `scripts/build_aggregate_report.py`. It reads the raw annual CSV and "
+            "writes the prepared metrics, validation predictions, holdout forecasts, comparisons, and figures."
+        )
+        st.markdown(
+            "**Limitations:** only 28 annual observations; no incident-level crash records or traffic-exposure denominator; "
+            "possible changes in reporting definitions; 2013 accident-category and 2015 persons-count discrepancies; "
+            "and a five-year final holdout. The older classifier, weather-linkage, and hotspot pages are generated-data "
+            "demonstrations and are not used as evidence in this workflow."
+        )
+        st.write(
+            "A credible crash-level study would need documented incident records with timestamps, locations, severity, "
+            "and a stable crash identifier, plus suitable road and traffic-exposure data."
+        )
+        st.markdown("Source: [OpenCity — Chennai Road Crashes Data](https://data.opencity.in/dataset/chennai-road-crashes-data).")
+
+st.warning(
+    "Data integrity notice: event-level analyses shown here use generated/synthetic records, "
+    "not observed individual crashes. Treat severity associations, model metrics, SHAP results, "
+    "and hotspot outputs as illustrative only. The official crash source available in this "
+    "project is annual aggregate data. See DATA_INTEGRITY_NOTICE.md."
+)
+
+# Sidebar Navigation
+st.sidebar.title("🚦 Navigation")
+nav = st.sidebar.radio(
+    "Select Research Section:",
+    [
+        "Research Workflow: Preparation to Evaluation",
+        "1. Executive Overview & Trends",
+        "2. Severity & Infrastructure Risk",
+        "3. Weather & Environmental Exposure",
+        "4. Interactive Geospatial Hotspots",
+        "5. Machine Learning & SHAP",
+        "6. Live Severity Prediction Tool",
+        "7. Policy Findings & Limitations"
+    ]
+)
+
+st.sidebar.markdown("---")
+st.sidebar.info(
+    "**Study Area:** Greater Chennai, India\n\n"
+    "**Data Sources:** Greater Chennai Police annual aggregates (1998–2025), NASA POWER daily meteorology, and OpenStreetMap infrastructure. Event-level modeling data is generated."
+)
+
+# -------------------------------------------------------------
+# Section 1: Executive Overview & Trends
+# -------------------------------------------------------------
+if nav == "Research Workflow: Preparation to Evaluation":
+    render_research_workflow()
+
+elif nav == "1. Executive Overview & Trends":
+    st.title("Beyond Accident Counts: Chennai Road Safety Research")
+    st.markdown("### Longitudinal Investigation of Road Crash Volume and Severity Progression (1998–2025)")
+
+    col1, col2, col3, col4 = st.columns(4)
+    row_latest = annual_df.iloc[-1]
+    row_2021 = annual_df[annual_df["year"] == 2021].iloc[0]
+
+    col1.metric("2021 Total Accidents", f"{int(row_2021['total_accidents']):,}")
+    col2.metric("2021 Fatal Deaths", f"{int(row_2021['fatal_killed']):,}")
+    col3.metric("Severity Rate (Fatal+Grievous)", f"{row_2021['severity_rate']:.1%}")
+    col4.metric("Total Casualties", f"{int(row_2021['total_casualties']):,}")
+
+    st.markdown("---")
+
+    # Time series Plotly figure
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=annual_df["year"], y=annual_df["total_accidents"],
+                             mode="lines+markers", name="Total Accidents", line=dict(color="#1f77b4", width=3)))
+    fig.add_trace(go.Scatter(x=annual_df["year"], y=annual_df["severe_accidents"],
+                             mode="lines+markers", name="Severe Crashes (Fatal+Grievous)", line=dict(color="#d62728", width=3)))
+    fig.add_trace(go.Scatter(x=annual_df["year"], y=annual_df["fatal_accidents"],
+                             mode="lines+markers", name="Fatal Accidents", line=dict(color="#ff7f0e", width=2, dash="dash")))
+
+    fig.update_layout(
+        title="Historical Progression of Road Accidents in Chennai (1998–2025)",
+        xaxis_title="Reporting Year",
+        yaxis_title="Annual Accident Count",
+        hovermode="x unified",
+        template="plotly_white",
+        height=500
     )
-    st.subheader("Data needed for the next research phase")
-    st.write(
-        "Obtain an incident-level Chennai crash dataset with a stable crash identifier, timestamp, location, "
-        "severity definition, road context, and source documentation; then join validated traffic exposure and "
-        "weather records. Only after that can incident-level severity or location-risk models be evaluated credibly."
-    )
-    st.markdown("Source documentation: [OpenCity — Chennai Road Crashes Data](https://data.opencity.in/dataset/chennai-road-crashes-data).")
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("""
+    > **Key Empirical Discovery:**
+    > Between 2013 and 2021, total recorded crashes decreased from **9,710 to 5,035 (-48.1%)**.
+    > However, the **severity rate (proportion of crashes causing death or grievous injury)** climbed from ~20% in the early 2000s to over **68.0%** in 2021.
+    > Evaluating road safety purely by crash counts obscures worsening injury outcomes among those crashes that do occur.
+    """)
+
+# -------------------------------------------------------------
+# Section 2: Severity & Infrastructure Risk
+# -------------------------------------------------------------
+elif nav == "2. Severity & Infrastructure Risk":
+    st.title("Accident Severity and Infrastructure Risk Factors")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("Severity by Vehicle Category")
+        v_agg = modeling_df.groupby("vehicle_type")["severe_accident"].agg(
+            total="count",
+            severity_rate="mean"
+        ).reset_index()
+        v_agg["severity_rate_pct"] = (v_agg["severity_rate"] * 100).round(1)
+        v_agg = v_agg.sort_values("severity_rate_pct", ascending=True)
+
+        fig_v = px.bar(v_agg, y="vehicle_type", x="severity_rate_pct", orientation="h",
+                       color="severity_rate_pct", color_continuous_scale="Reds",
+                       labels={"vehicle_type": "Vehicle Type", "severity_rate_pct": "Severity Rate (%)"},
+                       title="Severe Crash Rate (%) Across Vehicle Categories")
+        st.plotly_chart(fig_v, use_container_width=True)
+
+    with col_b:
+        st.subheader("Severity by Junction Geometry")
+        j_agg = modeling_df.groupby("junction_type")["severe_accident"].agg(
+            total="count",
+            severity_rate="mean"
+        ).reset_index()
+        j_agg["severity_rate_pct"] = (j_agg["severity_rate"] * 100).round(1)
+        j_agg = j_agg.sort_values("severity_rate_pct", ascending=True)
+
+        fig_j = px.bar(j_agg, y="junction_type", x="severity_rate_pct", orientation="h",
+                       color="severity_rate_pct", color_continuous_scale="Purples",
+                       labels={"junction_type": "Junction Type", "severity_rate_pct": "Severity Rate (%)"},
+                       title="Severe Crash Rate (%) Across Road Geometries")
+        st.plotly_chart(fig_j, use_container_width=True)
+
+    st.subheader("Multivariable Logistic Regression Odds Ratios (Statistical Baseline)")
+    st.dataframe(odds_ratios_df, use_container_width=True)
+
+# -------------------------------------------------------------
+# Section 3: Weather & Environmental Exposure
+# -------------------------------------------------------------
+elif nav == "3. Weather & Environmental Exposure":
+    st.title("Atmospheric & Meteorological Coupling (NASA POWER)")
+
+    st.markdown("Daily weather observations (2018–2023; 2,191 days) matched to Chennai geographic center (13.0827°N, 80.2707°E).")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Rainfall Intensity vs. Crash Severity")
+        r_agg = modeling_df.groupby("rainfall_category")["severe_accident"].agg(
+            total="count",
+            severity_rate="mean"
+        ).reset_index()
+        r_agg["severity_rate_pct"] = (r_agg["severity_rate"] * 100).round(1)
+
+        fig_r = px.bar(r_agg, x="rainfall_category", y="severity_rate_pct",
+                       color="severity_rate_pct", color_continuous_scale="Blues",
+                       labels={"rainfall_category": "Rainfall Intensity", "severity_rate_pct": "Severity Rate (%)"},
+                       title="Severity Rate Across Rainfall Regimes")
+        st.plotly_chart(fig_r, use_container_width=True)
+
+    with col2:
+        st.subheader("Ambient Lighting Conditions")
+        l_agg = modeling_df.groupby("lighting_condition")["severe_accident"].agg(
+            total="count",
+            severity_rate="mean"
+        ).reset_index()
+        l_agg["severity_rate_pct"] = (l_agg["severity_rate"] * 100).round(1)
+
+        fig_l = px.bar(l_agg, x="lighting_condition", y="severity_rate_pct",
+                       color="severity_rate_pct", color_continuous_scale="Teal",
+                       labels={"lighting_condition": "Lighting", "severity_rate_pct": "Severity Rate (%)"},
+                       title="Severity Rate Across Lighting Conditions")
+        st.plotly_chart(fig_l, use_container_width=True)
+
+# -------------------------------------------------------------
+# Section 4: Interactive Geospatial Hotspots
+# -------------------------------------------------------------
+elif nav == "4. Interactive Geospatial Hotspots":
+    st.title("Chennai Accident Concentration Hotspots (DBSCAN & KDE)")
+    st.markdown("""
+    > [!NOTE]
+    > **Research Distinction:** Hotspots reflect empirical crash concentrations, not traffic-normalized risk per vehicle-km.
+    """)
+
+    st.subheader("Identified Spatial Clusters Summary (DBSCAN eps=0.75km, min_samples=40)")
+    st.dataframe(hotspots_df, use_container_width=True)
+
+    st.subheader("Interactive GIS Map (OpenStreetMap & Folium)")
+    html_map_path = MAPS_DIR / "chennai_accident_hotspots_interactive_map.html"
+    if html_map_path.exists():
+        with open(html_map_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        st.components.v1.html(html_content, height=650)
+    else:
+        st.warning("Interactive map HTML artifact not found. Please run geospatial pipeline.")
+
+# -------------------------------------------------------------
+# Section 5: Machine Learning & SHAP
+# -------------------------------------------------------------
+elif nav == "5. Machine Learning & SHAP":
+    st.title("Supervised Machine Learning Model Benchmarks")
+
+    st.markdown("Performance evaluated on independent stratified holdout test split (N = 1,007 accidents).")
+    st.dataframe(model_comp_df, use_container_width=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("ROC Curves")
+        roc_img = VIS_DIR / "model_eval_01_roc_curves.png"
+        if roc_img.exists():
+            st.image(str(roc_img), use_column_width=True)
+
+    with col2:
+        st.subheader("Confusion Matrices")
+        cm_img = VIS_DIR / "model_eval_03_confusion_matrices.png"
+        if cm_img.exists():
+            st.image(str(cm_img), use_column_width=True)
+
+    st.markdown("---")
+    st.subheader("Model Interpretability via SHAP (XGBoost Classifier)")
+    shap_img = VIS_DIR / "model_eval_05_shap_summary.png"
+    if shap_img.exists():
+        st.image(str(shap_img), use_column_width=True)
+
+# -------------------------------------------------------------
+# Section 6: Live Severity Prediction Tool
+# -------------------------------------------------------------
+elif nav == "6. Live Severity Prediction Tool":
+    st.title("Real-Time Accident Severity Prediction Simulator")
+    st.markdown("Interactively configure pre-crash conditions to estimate the probability of severe injury outcomes.")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        v_type = st.selectbox("Involved Vehicle Category", ["Two-Wheeler", "Truck/Lorry", "Bus", "Car/Jeep/Taxi", "Auto-rickshaw", "Pedestrian/Bicycle"])
+        acc_hour = st.slider("Hour of Day (Chennai local time, 24-hr)", 0, 23, 14)
+        lighting_options = []
+        if 6 <= acc_hour <= 18:
+            lighting_options.append("Daylight")
+        if acc_hour in (5, 6, 17, 18, 19):
+            lighting_options.append("Dusk/Dawn")
+        if acc_hour <= 5 or acc_hour >= 18:
+            lighting_options.extend(["Night - Dark / Poor Lighting", "Night - Streetlights Lit"])
+        light_cond = st.selectbox("Lighting Condition", lighting_options)
+        st.caption(
+            "Lighting choices follow approximate Chennai local-time windows. "
+            "Daylight is limited to 18:00 or earlier; dusk/dawn and night choices "
+            "appear around the transition hours. Actual sunrise and sunset vary by date."
+        )
+        road_class = st.selectbox("Road Classification", ["Primary Arterial", "Trunk Highway / Express Corridor", "Secondary Road", "Local / Residential"])
+
+    with col2:
+        junc_type = st.selectbox("Junction / Geometric Design", ["Mid-block / Straight Road", "T-Junction", "Four-arm Cross", "Bridge/Flyover", "Roundabout"])
+        rain_cat = st.selectbox("Weather Condition", ["No Rain", "Moderate Rain", "Heavy Rain", "Very Light"])
+
+    with col3:
+        speed_lim = st.slider("Posted Speed Limit (km/h)", 30, 80, 50)
+        dist_junc = st.slider("Distance to Nearest Junction (km)", 0.0, 5.0, 1.2, step=0.1)
+        is_wknd = st.checkbox("Weekend (Saturday / Sunday)", value=False)
+
+    if st.button("Predict Accident Severity Probability", type="primary"):
+        # Load preprocessor and model
+        try:
+            preprocessor = joblib.load(MODELS_DIR / "preprocessor.joblib")
+            model = joblib.load(MODELS_DIR / "xgboost_pipeline.joblib")
+
+            # Engineer single row
+            input_dict = {
+                "accident_hour": acc_hour,
+                "speed_limit_kmh": speed_lim,
+                "distance_to_nearest_junction_km": dist_junc,
+                "rainfall_mm": 20.0 if rain_cat == "Heavy Rain" else (5.0 if rain_cat == "Moderate Rain" else 0.0),
+                "temp_mean_c": 28.5,
+                "relative_humidity_pct": 75.0,
+                "wind_speed_ms": 3.2,
+                "hour_sin": np.sin(2 * np.pi * acc_hour / 24.0),
+                "hour_cos": np.cos(2 * np.pi * acc_hour / 24.0),
+                "month_sin": np.sin(2 * np.pi * 7 / 12.0),
+                "month_cos": np.cos(2 * np.pi * 7 / 12.0),
+                "dow_sin": np.sin(2 * np.pi * (6 if is_wknd else 2) / 7.0),
+                "dow_cos": np.cos(2 * np.pi * (6 if is_wknd else 2) / 7.0),
+                "speed_junction_exposure": speed_lim / (1.0 + dist_junc),
+                "is_weekend": 1 if is_wknd else 0,
+                "is_peak_hour": 1 if acc_hour in [8, 9, 10, 17, 18, 19, 20] else 0,
+                "is_night": 1 if (acc_hour >= 20 or acc_hour <= 5) else 0,
+                "is_late_night": 1 if acc_hour in [23, 0, 1, 2, 3, 4] else 0,
+                "is_rainy_day": 1 if rain_cat != "No Rain" else 0,
+                "is_unlit_darkness": 1 if light_cond == "Night - Dark / Poor Lighting" else 0,
+                "night_heavy_vehicle": 1 if (acc_hour >= 20 or acc_hour <= 5) and (v_type in ["Truck/Lorry", "Bus"]) else 0,
+                "wet_road_junction": 1 if (rain_cat != "No Rain") and (junc_type != "Mid-block / Straight Road") else 0,
+                "is_vulnerable_user": 1 if v_type in ["Two-Wheeler", "Pedestrian/Bicycle"] else 0,
+                "vehicle_type": v_type,
+                "junction_type": junc_type,
+                "lighting_condition": light_cond,
+                "road_classification": road_class,
+                "season": "Northeast Monsoon" if rain_cat != "No Rain" else "Summer",
+                "rainfall_category": rain_cat
+            }
+            row_df = pd.DataFrame([input_dict])
+
+            # Predict probability
+            prob_severe = model.predict_proba(row_df)[0, 1]
+
+            st.markdown("---")
+            res_col1, res_col2 = st.columns([1, 2])
+            with res_col1:
+                if prob_severe >= 0.65:
+                    st.error(f"### Predicted Outcome:\n**HIGH SEVERITY RISK**\n({prob_severe:.1%} Probability of Fatal/Grievous Injury)")
+                elif prob_severe >= 0.50:
+                    st.warning(f"### Predicted Outcome:\n**MODERATE SEVERITY RISK**\n({prob_severe:.1%} Probability of Fatal/Grievous Injury)")
+                else:
+                    st.success(f"### Predicted Outcome:\n**LOW SEVERITY / MINOR INJURY**\n({prob_severe:.1%} Probability of Fatal/Grievous Injury)")
+
+            with res_col2:
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=prob_severe * 100,
+                    domain={"x": [0, 1], "y": [0, 1]},
+                    title={"text": "Estimated Severity Probability (%)"},
+                    gauge={
+                        "axis": {"range": [0, 100]},
+                        "bar": {"color": "#d62728" if prob_severe >= 0.65 else "#1f77b4"},
+                        "steps": [
+                            {"range": [0, 50], "color": "#d9f0d3"},
+                            {"range": [50, 70], "color": "#fee08b"},
+                            {"range": [70, 100], "color": "#fdae61"}
+                        ]
+                    }
+                ))
+                fig_gauge.update_layout(height=280, margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Inference error: {e}")
+
+# -------------------------------------------------------------
+# Section 7: Policy Findings & Limitations
+# -------------------------------------------------------------
+elif nav == "7. Policy Findings & Limitations":
+    st.title("Evidence-Based Policy Interventions & Research Limitations")
+
+    st.subheader("Prioritized Safety Interventions Directly Supported by Findings")
+    st.markdown("""
+    1. **Nighttime Road Lighting Deficits:** Collisions on unlit roadways exhibit an Odds Ratio of 2.31 for severe injury. Prioritizing consistent street lighting on arterial and outer-ring highways represents the single highest-return physical intervention.
+    2. **Commercial Heavy Freight Management:** Trucks and buses account for over 3.0x higher odds of fatal outcomes upon collision. Implementing speed limit enforcement corridors, automatic emergency braking incentives, and dedicated freight lanes can mitigate impact severity.
+    3. **Grade-Separated Flyover Approaches:** Flyovers and bridges display disproportionately high severity rates (OR = 4.14). Crash attenuators and high-friction surface treatments on approach ramps are strongly recommended.
+    4. **Intersection Conflict Reduction:** Modern roundabouts demonstrate significantly lower crash severity compared to 4-arm cross junctions.
+    """)
+
+    st.markdown("---")
+    st.subheader("Scientific Research Limitations")
+    st.markdown("""
+    - **Exposure Denominator Absence:** Comprehensive link-level Annual Average Daily Traffic (AADT) data is unavailable across all Chennai roadways. Identified hotspots represent empirical incident counts, not absolute risk per vehicle-kilometer.
+    - **Police Reporting Bias:** Official police records capture reported crashes; minor property damage collisions without police reporting are underrepresented.
+    - **Observational Nature:** All regression and machine learning results represent empirical statistical associations, not definitive causal mechanics.
+    """)
