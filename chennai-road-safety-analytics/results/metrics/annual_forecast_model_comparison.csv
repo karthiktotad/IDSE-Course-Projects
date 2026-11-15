@@ -1,0 +1,4 @@
+model,rolling_cv_MAE,rolling_cv_RMSE,rolling_cv_MAPE_percent,holdout_MAE,holdout_RMSE,holdout_MAPE_percent
+Last-year baseline,993.27,1459.37,14.91,646.20,679.80,16.74
+Linear trend,1766.78,2079.68,26.20,4428.39,4478.99,114.55
+Poisson trend,1918.33,2215.63,28.69,4733.82,4789.05,122.38
