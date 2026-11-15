@@ -82,7 +82,7 @@ def render_research_workflow():
 
     with preparation_tab:
         st.subheader("Source and preparation")
-        st.caption("Source file: data/raw/accidents/chennai_road_crashes_1998_2025.csv")
+        st.caption("Annual forecast source (1 CSV): data/raw/accidents/chennai_road_crashes_1998_2025.csv")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Annual rows", f"{len(source)}")
         c2.metric("Source columns", f"{len(source.columns)}")
@@ -98,6 +98,45 @@ def render_research_workflow():
             "check missing values, duplicate years, and gaps; derive fatal-plus-grievous counts and their share of "
             "the reported total. The reported total remains the forecast target; source values are not silently corrected."
         )
+
+        st.divider()
+        st.subheader("How the separate severity-classifier data was prepared")
+        st.markdown(
+            "The **1 CSV above is for the annual-count analysis**. The original severity classifier follows a separate "
+            "preparation path. Its trainer reads one final feature-matrix CSV, created from a generated event-level "
+            "dataset that reads five upstream processed CSVs."
+        )
+        lineage = pd.DataFrame([
+            {
+                "Stage": "Upstream inputs read by the generator (5 CSVs)",
+                "Files": (
+                    "chennai_annual_crash_severity_preprocessed.csv; "
+                    "chennai_daily_weather_preprocessed.csv; "
+                    "chennai_osm_junctions_preprocessed.csv; "
+                    "chennai_osm_roads_preprocessed.csv; "
+                    "chennai_traffic_police_jurisdictions_preprocessed.csv"
+                ),
+                "Use / status": "Annual totals set severity counts; weather and jurisdiction/junction context are sampled or assigned. The roads CSV is read but not used by the current generator."
+            },
+            {
+                "Stage": "Generated intermediate dataset",
+                "Files": "chennai_accident_severity_modeling_dataset.csv",
+                "Use / status": "5,035 incident-like rows calibrated to 2021 aggregate totals; not 5,035 observed crash records."
+            },
+            {
+                "Stage": "Feature engineering output and classifier input (1 CSV)",
+                "Files": "chennai_feature_matrix.csv",
+                "Use / status": "The severity-model training code reads this prepared matrix, then makes an 80/20 stratified split."
+            },
+        ])
+        st.dataframe(lineage, hide_index=True, use_container_width=True)
+        st.warning(
+            "The severity labels are assigned to match annual aggregate counts, and some feature values are then "
+            "sampled in ways that depend on those labels. These generated records cannot validate real-world crash-severity "
+            "prediction. Treat the classifier and its scores as a modeling demonstration until genuine incident-level "
+            "crash records are available."
+        )
+
         category_issues = aggregate[aggregate["category_total_difference"] != 0]
         person_issues = aggregate[aggregate["person_total_difference"] != 0]
         issues = []
