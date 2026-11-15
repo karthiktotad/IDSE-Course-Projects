@@ -2,6 +2,10 @@
 
 An interactive dashboard and research report exploring road-crash trends in Greater Chennai.
 
+## Start here
+
+**[Read the Final Research Report](reports/FINAL_RESEARCH_REPORT.md)**
+
 **Live dashboard:** [road-safety-ml-chennai.streamlit.app](https://road-safety-ml-chennai.streamlit.app/)
 
 ## Project scope
@@ -35,7 +39,6 @@ This reads `data/raw/accidents/chennai_road_crashes_1998_2025.csv` and regenerat
 
 ## Key files
 
-- [Final research report](reports/FINAL_RESEARCH_REPORT.md)
 - [Data integrity notice](DATA_INTEGRITY_NOTICE.md)
 - [Data sources](DATA_SOURCES.md)
 - Dashboard: `app.py`
