@@ -68,7 +68,8 @@ def render_research_workflow():
     )
     st.info(
         "This research workflow uses the official annual aggregate table only. The original event-level "
-        "demo pages remain illustrative because their incident-like rows are generated; the warning above applies."
+        "demo pages remain illustrative because their incident-like rows are generated. See the final "
+        "Policy Findings & Limitations page for the full data integrity notice."
     )
 
     preparation_tab, eda_tab, modeling_tab, evaluation_tab, reproducibility_tab = st.tabs(
@@ -240,13 +241,6 @@ def render_research_workflow():
         )
         st.markdown("Source: [OpenCity — Chennai Road Crashes Data](https://data.opencity.in/dataset/chennai-road-crashes-data).")
 
-st.warning(
-    "Data integrity notice: event-level analyses shown here use generated/synthetic records, "
-    "not observed individual crashes. Treat severity associations, model metrics, SHAP results, "
-    "and hotspot outputs as illustrative only. The official crash source available in this "
-    "project is annual aggregate data. See DATA_INTEGRITY_NOTICE.md."
-)
-
 # Sidebar Navigation
 st.sidebar.title("🚦 Navigation")
 nav = st.sidebar.radio(
@@ -400,7 +394,7 @@ elif nav == "4. Interactive Geospatial Hotspots":
     st.title("Chennai Accident Concentration Hotspots (DBSCAN & KDE)")
     st.markdown("""
     > [!NOTE]
-    > **Research Distinction:** Hotspots reflect empirical crash concentrations, not traffic-normalized risk per vehicle-km.
+    > **Illustrative map:** Coordinates come from generated event-like records, not observed crash locations. These clusters do not establish real crash hotspots or traffic-normalized risk.
     """)
 
     st.subheader("Identified Spatial Clusters Summary (DBSCAN eps=0.75km, min_samples=40)")
@@ -421,7 +415,7 @@ elif nav == "4. Interactive Geospatial Hotspots":
 elif nav == "5. Machine Learning & SHAP":
     st.title("Supervised Machine Learning Model Benchmarks")
 
-    st.markdown("Performance evaluated on independent stratified holdout test split (N = 1,007 accidents).")
+    st.markdown("Performance evaluated on an independent stratified holdout split (N = 1,007 generated event-like rows).")
     st.dataframe(model_comp_df, use_container_width=True)
 
     col1, col2 = st.columns(2)
@@ -557,20 +551,32 @@ elif nav == "6. Live Severity Prediction Tool":
 # Section 7: Policy Findings & Limitations
 # -------------------------------------------------------------
 elif nav == "7. Policy Findings & Limitations":
-    st.title("Evidence-Based Policy Interventions & Research Limitations")
+    st.title("Policy Considerations & Research Limitations")
 
-    st.subheader("Prioritized Safety Interventions Directly Supported by Findings")
+    st.subheader("Questions to test with verified crash-level data")
     st.markdown("""
-    1. **Nighttime Road Lighting Deficits:** Collisions on unlit roadways exhibit an Odds Ratio of 2.31 for severe injury. Prioritizing consistent street lighting on arterial and outer-ring highways represents the single highest-return physical intervention.
-    2. **Commercial Heavy Freight Management:** Trucks and buses account for over 3.0x higher odds of fatal outcomes upon collision. Implementing speed limit enforcement corridors, automatic emergency braking incentives, and dedicated freight lanes can mitigate impact severity.
-    3. **Grade-Separated Flyover Approaches:** Flyovers and bridges display disproportionately high severity rates (OR = 4.14). Crash attenuators and high-friction surface treatments on approach ramps are strongly recommended.
-    4. **Intersection Conflict Reduction:** Modern roundabouts demonstrate significantly lower crash severity compared to 4-arm cross junctions.
+    The project’s generated event-level records can suggest topics for future investigation, but they cannot establish which factors increase real crash severity. With authentic incident records, a follow-up study could examine:
+
+    1. Whether lighting conditions are associated with injury severity after accounting for time and road context.
+    2. How vehicle type, speed environment, and junction design relate to observed outcomes.
+    3. Whether weather and location patterns persist when matched to individual crash records.
+
+    These are research questions, not findings or recommendations from the current synthetic classifier.
     """)
 
     st.markdown("---")
     st.subheader("Scientific Research Limitations")
     st.markdown("""
-    - **Exposure Denominator Absence:** Comprehensive link-level Annual Average Daily Traffic (AADT) data is unavailable across all Chennai roadways. Identified hotspots represent empirical incident counts, not absolute risk per vehicle-kilometer.
-    - **Police Reporting Bias:** Official police records capture reported crashes; minor property damage collisions without police reporting are underrepresented.
-    - **Observational Nature:** All regression and machine learning results represent empirical statistical associations, not definitive causal mechanics.
+    - **Annual aggregate source:** The official crash table has yearly totals and severity counts, not one row per crash, so it cannot train or validate an individual crash-severity model.
+    - **Generated event-level records:** The legacy severity, weather-linkage, and hotspot analyses use constructed records. Their metrics and patterns are illustrative, not empirical Chennai crash findings.
+    - **Missing exposure data:** The project does not have a complete traffic-volume denominator for comparing risk per vehicle-kilometer.
+    - **Data needed next:** A defensible crash-level study needs documented incident records with observed severity, timestamps, locations, and relevant recorded conditions, plus suitable traffic-exposure data.
     """)
+
+    st.markdown("---")
+    st.warning(
+        "Data integrity notice: event-level analyses in this project use generated/synthetic records, "
+        "not observed individual crashes. Treat severity associations, model metrics, SHAP results, and "
+        "hotspot outputs as illustrative only. The official crash source available here contains annual "
+        "aggregate data. See DATA_INTEGRITY_NOTICE.md."
+    )
